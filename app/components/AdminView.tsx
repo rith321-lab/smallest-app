@@ -27,6 +27,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [editingFilename, setEditingFilename] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState({ speakerId: '', sampleId: '' });
+    const [saving, setSaving] = useState(false);
 
     const fetchRecordings = async () => {
         try {
@@ -61,6 +64,68 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
     const handleExport = () => {
         window.location.href = '/api/export-dataset';
+    };
+
+    const handleEdit = (rec: Recording) => {
+        setEditingFilename(rec.filename);
+        setEditForm({ speakerId: rec.speakerId, sampleId: rec.sampleId });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingFilename(null);
+        setEditForm({ speakerId: '', sampleId: '' });
+    };
+
+    const handleSave = async (originalFilename: string) => {
+        setSaving(true);
+        try {
+            const res = await fetch('/api/update-recording', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    originalFilename,
+                    newSpeakerId: editForm.speakerId,
+                    newSampleId: editForm.sampleId
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setEditingFilename(null);
+                await fetchRecordings();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Update error:', error);
+            alert('Failed to update recording');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (filename: string) => {
+        if (!confirm(`Are you sure you want to delete ${filename}? This cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/delete-recording', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                await fetchRecordings();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            alert('Failed to delete recording');
+        }
     };
 
     return (
@@ -134,57 +199,128 @@ export default function AdminView({ onBack }: AdminViewProps) {
                                     <th className="p-4 text-center">Audio (WAV)</th>
                                     <th className="p-4 text-center">Transcript</th>
                                     <th className="p-4 text-right">Time</th>
+                                    <th className="p-4 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700">
                                 {loading && recordings.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-slate-500">
+                                        <td colSpan={8} className="p-8 text-center text-slate-500">
                                             Loading recordings...
                                         </td>
                                     </tr>
                                 ) : recordings.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-slate-500">
+                                        <td colSpan={8} className="p-8 text-center text-slate-500">
                                             No recordings found yet. Start a conversation!
                                         </td>
                                     </tr>
                                 ) : (
-                                    recordings.map((rec) => (
-                                        <tr key={rec.filename} className="hover:bg-slate-700/30 transition-colors">
-                                            <td className="p-4 font-mono text-sm text-blue-300">
-                                                {rec.filename}
-                                            </td>
-                                            <td className="p-4">{rec.speakerId}</td>
-                                            <td className="p-4">{rec.sampleId}</td>
-                                            <td className="p-4 text-slate-400 text-sm">
-                                                {formatBytes(rec.size)}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                {rec.hasAudio ? (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-900 text-emerald-200">
-                                                        ✅ Saved
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-red-400">❌ Missing</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                {rec.hasTranscript ? (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-900 text-emerald-200">
-                                                        ✅ Saved
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-900 text-amber-200">
-                                                        ⚠️ Pending
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-right text-slate-400 text-sm">
-                                                {new Date(rec.createdAt).toLocaleTimeString()}
-                                            </td>
-                                        </tr>
-                                    ))
+                                    recordings.map((rec) => {
+                                        const isEditing = editingFilename === rec.filename;
+                                        return (
+                                            <tr key={rec.filename} className="hover:bg-slate-700/30 transition-colors">
+                                                <td className="p-4 font-mono text-sm text-blue-300">
+                                                    {rec.filename}
+                                                </td>
+                                                <td className="p-4">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="text"
+                                                            value={editForm.speakerId}
+                                                            onChange={(e) => setEditForm({ ...editForm, speakerId: e.target.value })}
+                                                            className="w-20 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-sm"
+                                                            placeholder="0000"
+                                                            maxLength={4}
+                                                        />
+                                                    ) : (
+                                                        rec.speakerId
+                                                    )}
+                                                </td>
+                                                <td className="p-4">
+                                                    {isEditing ? (
+                                                        <input
+                                                            type="text"
+                                                            value={editForm.sampleId}
+                                                            onChange={(e) => setEditForm({ ...editForm, sampleId: e.target.value })}
+                                                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-sm"
+                                                            placeholder="001"
+                                                            maxLength={3}
+                                                        />
+                                                    ) : (
+                                                        rec.sampleId
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-slate-400 text-sm">
+                                                    {formatBytes(rec.size)}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {rec.hasAudio ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-900 text-emerald-200">
+                                                            ✅ Saved
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-red-400">❌ Missing</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {rec.hasTranscript ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-900 text-emerald-200">
+                                                            ✅ Saved
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-900 text-amber-200">
+                                                            ⚠️ Pending
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-right text-slate-400 text-sm">
+                                                    {new Date(rec.createdAt).toLocaleTimeString()}
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex gap-2 justify-center">
+                                                        {isEditing ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleSave(rec.filename)}
+                                                                    disabled={saving}
+                                                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 rounded text-xs transition-colors"
+                                                                    title="Save"
+                                                                >
+                                                                    💾
+                                                                </button>
+                                                                <button
+                                                                    onClick={handleCancelEdit}
+                                                                    disabled={saving}
+                                                                    className="px-2 py-1 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 rounded text-xs transition-colors"
+                                                                    title="Cancel"
+                                                                >
+                                                                    ❌
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleEdit(rec)}
+                                                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-colors"
+                                                                    title="Edit"
+                                                                >
+                                                                    ✏️
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDelete(rec.filename)}
+                                                                    className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
+                                                                    title="Delete"
+                                                                >
+                                                                    🗑️
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
