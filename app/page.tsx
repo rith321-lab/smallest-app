@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import io, { Socket } from 'socket.io-client';
 import Login from './components/Login';
 import Lobby from './components/Lobby';
@@ -9,7 +9,7 @@ import AnnotationView from './components/AnnotationView';
 import AdminView from './components/AdminView';
 
 // Initialize socket outside component to avoid multiple connections
-let socket: Socket;
+// let socket: Socket;
 
 export default function Home() {
   const [view, setView] = useState<'login' | 'lobby' | 'conversation' | 'annotation' | 'admin'>('login');
@@ -18,10 +18,12 @@ export default function Home() {
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
   const [roomId, setRoomId] = useState<string>('');
   const [recordings, setRecordings] = useState<Blob[]>([]);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     // Connect to custom server
-    socket = io();
+    const socket = io();
+    socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('Connected to server', socket.id);
@@ -40,19 +42,19 @@ export default function Home() {
     });
 
     return () => {
-      if (socket) socket.disconnect();
+      socket.disconnect();
     };
   }, []);
 
   const handleJoin = (data: { name: string; nationality: string; interests: string[]; age: number; gender: string }) => {
     setUserData(data);
     setView('lobby');
-    socket.emit('login', data);
+    socketRef.current?.emit('login', data);
   };
 
   const handleFindMatch = () => {
     setMatchStatus('searching');
-    socket.emit('find_match');
+    socketRef.current?.emit('find_match');
   };
 
   const handleCreatePrivate = () => {
@@ -94,9 +96,9 @@ export default function Home() {
         />
       )}
 
-      {view === 'conversation' && userData && partnerData && (
+      {view === 'conversation' && userData && partnerData && socketRef.current && (
         <ConversationRoom
-          socket={socket}
+          socket={socketRef.current}
           roomId={roomId}
           userData={userData}
           partnerData={partnerData}
