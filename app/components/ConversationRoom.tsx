@@ -21,6 +21,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const currentChunkRef = useRef<Blob[]>([]);
+    const recordingsRef = useRef<Blob[]>([]); // Track recordings synchronously
 
     useEffect(() => {
         // Initialize WebRTC and Socket listeners
@@ -131,8 +132,11 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
         socket.on('conversation_ended', () => {
             stopRecording(); // Ensure last chunk is saved
-            cleanup();
-            onEnd(recordings);
+            // Wait a bit for the last recording to be processed
+            setTimeout(() => {
+                cleanup();
+                onEnd(recordingsRef.current); // Use ref to get all recordings
+            }, 100);
         });
 
         return () => {
@@ -195,6 +199,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
         recorder.onstop = () => {
             const blob = new Blob(currentChunkRef.current, { type: 'audio/webm' });
+            recordingsRef.current = [...recordingsRef.current, blob]; // Update ref synchronously
             setRecordings(prev => [...prev, blob]);
             currentChunkRef.current = [];
         };
