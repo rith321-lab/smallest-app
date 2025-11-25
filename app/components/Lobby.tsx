@@ -8,9 +8,10 @@ interface LobbyProps {
     onCreatePrivate: () => void;
     onJoinPrivate: (code: string) => void;
     matchStatus: 'idle' | 'searching' | 'matched';
+    onAdmin: () => void;
 }
 
-export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPrivate, matchStatus }: LobbyProps) {
+export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPrivate, matchStatus, onAdmin }: LobbyProps) {
     const [joinCode, setJoinCode] = useState('');
 
     return (
@@ -24,12 +25,19 @@ export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPr
                             {userData.nationality}
                         </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                         {userData.interests.map(i => (
                             <span key={i} className="text-xs px-2 py-1 bg-slate-700 rounded-full text-slate-300">
                                 {i}
                             </span>
                         ))}
+                        <button
+                            onClick={onAdmin}
+                            className="ml-2 text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 transition-colors"
+                            title="View Dataset Tracker"
+                        >
+                            📊
+                        </button>
                     </div>
                 </div>
 
@@ -44,8 +52,8 @@ export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPr
                             onClick={onFindMatch}
                             disabled={matchStatus === 'searching'}
                             className={`w-full py-3 px-4 rounded-lg font-bold transition-all ${matchStatus === 'searching'
-                                    ? 'bg-slate-600 cursor-not-allowed animate-pulse'
-                                    : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'
+                                ? 'bg-slate-600 cursor-not-allowed animate-pulse'
+                                : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'
                                 }`}
                         >
                             {matchStatus === 'searching' ? 'Looking for partner...' : 'Find Match'}

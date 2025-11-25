@@ -59,6 +59,11 @@ export default function Home() {
     // TODO: Emit create_private event
   };
 
+  const handleJoinPrivate = (code: string) => {
+    // TODO: Emit join_private event
+    console.log('Joining private room:', code);
+  };
+
   const handleConversationEnd = (blobs: Blob[]) => {
     setRecordings(blobs);
     setView('annotation');
@@ -83,7 +88,9 @@ export default function Home() {
           userData={userData}
           onFindMatch={handleFindMatch}
           onCreatePrivate={handleCreatePrivate}
+          onJoinPrivate={handleJoinPrivate}
           matchStatus={matchStatus}
+          onAdmin={() => setView('admin')}
         />
       )}
 
