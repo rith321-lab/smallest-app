@@ -129,7 +129,10 @@ export async function GET(request: NextRequest) {
     try {
         const zipBuffer = await createDatasetZip();
 
-        return new NextResponse(zipBuffer, {
+        // Convert Node.js Buffer to Blob for NextResponse
+        const blob = new Blob([zipBuffer], { type: 'application/zip' });
+
+        return new NextResponse(blob, {
             headers: {
                 'Content-Type': 'application/zip',
                 'Content-Disposition': `attachment; filename="spanish_tts_dataset_${Date.now()}.zip"`,

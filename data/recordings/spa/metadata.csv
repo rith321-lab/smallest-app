@@ -1,0 +1,2 @@
+file_name,speaker_id,age,gender,language,dialect,duration_sec,recording_device,notes
+spa_9999_001.wav,9999,0,Unknown,Spanish,Latin American,30,Browser WebRTC,Recorded via Spanish Annotator Platform
