@@ -17,9 +17,10 @@ const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 
 interface LoginProps {
     onJoin: (data: { name: string; nationality: string; interests: string[]; age: number; gender: string }) => void;
+    onAdmin: () => void;
 }
 
-export default function Login({ onJoin }: LoginProps) {
+export default function Login({ onJoin, onAdmin }: LoginProps) {
     const [name, setName] = useState('');
     const [nationality, setNationality] = useState(NATIONALITIES[0]);
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -126,6 +127,15 @@ export default function Login({ onJoin }: LoginProps) {
                         Enter Platform
                     </button>
                 </form>
+
+                <div className="mt-6 text-center">
+                    <button
+                        onClick={onAdmin}
+                        className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                        View Dataset Tracker
+                    </button>
+                </div>
             </div>
         </div>
     );

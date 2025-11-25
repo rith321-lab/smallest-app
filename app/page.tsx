@@ -6,12 +6,13 @@ import Login from './components/Login';
 import Lobby from './components/Lobby';
 import ConversationRoom from './components/ConversationRoom';
 import AnnotationView from './components/AnnotationView';
+import AdminView from './components/AdminView';
 
 // Initialize socket outside component to avoid multiple connections
 let socket: Socket;
 
 export default function Home() {
-  const [view, setView] = useState<'login' | 'lobby' | 'conversation' | 'annotation'>('login');
+  const [view, setView] = useState<'login' | 'lobby' | 'conversation' | 'annotation' | 'admin'>('login');
   const [userData, setUserData] = useState<{ name: string; nationality: string; interests: string[]; age: number; gender: string } | null>(null);
   const [partnerData, setPartnerData] = useState<{ name: string; nationality: string } | null>(null);
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
@@ -58,10 +59,6 @@ export default function Home() {
     // TODO: Emit create_private event
   };
 
-  const handleJoinPrivate = (code: string) => {
-    // TODO: Emit join_private event
-  };
-
   const handleConversationEnd = (blobs: Blob[]) => {
     setRecordings(blobs);
     setView('annotation');
@@ -69,21 +66,23 @@ export default function Home() {
 
   const handleAnnotationComplete = () => {
     setRecordings([]);
-    setMatchStatus('idle');
-    setPartnerData(null);
     setView('lobby');
   };
 
   return (
-    <main>
-      {view === 'login' && <Login onJoin={handleJoin} />}
+    <main className="min-h-screen bg-background">
+      {view === 'login' && (
+        <Login
+          onJoin={handleJoin}
+          onAdmin={() => setView('admin')}
+        />
+      )}
 
       {view === 'lobby' && userData && (
         <Lobby
           userData={userData}
           onFindMatch={handleFindMatch}
           onCreatePrivate={handleCreatePrivate}
-          onJoinPrivate={handleJoinPrivate}
           matchStatus={matchStatus}
         />
       )}
@@ -103,6 +102,10 @@ export default function Home() {
           recordings={recordings}
           onComplete={handleAnnotationComplete}
         />
+      )}
+
+      {view === 'admin' && (
+        <AdminView onBack={() => setView('login')} />
       )}
     </main>
   );
