@@ -10,6 +10,7 @@ interface AnnotationViewProps {
 export default function AnnotationView({ recordings, onComplete }: AnnotationViewProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [annotations, setAnnotations] = useState<string[]>(new Array(recordings.length).fill(''));
+    const [transcribing, setTranscribing] = useState<boolean[]>(new Array(recordings.length).fill(false));
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,6 +47,38 @@ export default function AnnotationView({ recordings, onComplete }: AnnotationVie
                 textareaRef.current.setSelectionRange(start + tag.length, start + tag.length);
             }
         }, 0);
+    };
+
+    const handleTranscribe = async () => {
+        const newTranscribing = [...transcribing];
+        newTranscribing[currentIndex] = true;
+        setTranscribing(newTranscribing);
+
+        try {
+            const formData = new FormData();
+            formData.append('audio', currentBlob, 'audio.webm');
+
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error('Transcription failed');
+            }
+
+            const data = await response.json();
+            const newAnnotations = [...annotations];
+            newAnnotations[currentIndex] = data.text;
+            setAnnotations(newAnnotations);
+        } catch (error) {
+            console.error('Transcription error:', error);
+            alert('Failed to transcribe audio. Please try again.');
+        } finally {
+            const newTranscribing = [...transcribing];
+            newTranscribing[currentIndex] = false;
+            setTranscribing(newTranscribing);
+        }
     };
 
     const handleNext = () => {
@@ -102,7 +135,7 @@ export default function AnnotationView({ recordings, onComplete }: AnnotationVie
                 </div>
 
                 {/* Audio Player */}
-                <div className="bg-slate-900 p-6 rounded-xl mb-6 flex justify-center">
+                <div className="bg-slate-900 p-6 rounded-xl mb-4 flex flex-col items-center gap-4">
                     <audio
                         ref={audioRef}
                         src={audioUrl}
@@ -110,6 +143,23 @@ export default function AnnotationView({ recordings, onComplete }: AnnotationVie
                         className="w-full"
                         key={currentIndex} // Force reload on change
                     />
+                    <button
+                        onClick={handleTranscribe}
+                        disabled={transcribing[currentIndex]}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-lg shadow-purple-500/20 transition-all flex items-center gap-2"
+                    >
+                        {transcribing[currentIndex] ? (
+                            <>
+                                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Transcribing...
+                            </>
+                        ) : (
+                            <>🎙️ Auto-Transcribe</>
+                        )}
+                    </button>
                 </div>
 
                 {/* Text Input */}
