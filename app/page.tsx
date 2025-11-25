@@ -1,65 +1,109 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import io, { Socket } from 'socket.io-client';
+import Login from './components/Login';
+import Lobby from './components/Lobby';
+import ConversationRoom from './components/ConversationRoom';
+import AnnotationView from './components/AnnotationView';
+
+// Initialize socket outside component to avoid multiple connections
+let socket: Socket;
 
 export default function Home() {
+  const [view, setView] = useState<'login' | 'lobby' | 'conversation' | 'annotation'>('login');
+  const [userData, setUserData] = useState<{ name: string; nationality: string; interests: string[] } | null>(null);
+  const [partnerData, setPartnerData] = useState<{ name: string; nationality: string } | null>(null);
+  const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
+  const [roomId, setRoomId] = useState<string>('');
+  const [recordings, setRecordings] = useState<Blob[]>([]);
+
+  useEffect(() => {
+    // Connect to custom server
+    socket = io();
+
+    socket.on('connect', () => {
+      console.log('Connected to server', socket.id);
+    });
+
+    socket.on('match_found', ({ roomId }) => {
+      setRoomId(roomId);
+      setMatchStatus('matched');
+      // Wait for partner info before switching? 
+      // Actually partner_info comes separately.
+    });
+
+    socket.on('partner_info', (partner) => {
+      setPartnerData(partner);
+      setView('conversation');
+    });
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, []);
+
+  const handleJoin = (data: { name: string; nationality: string; interests: string[] }) => {
+    setUserData(data);
+    setView('lobby');
+    socket.emit('login', data);
+  };
+
+  const handleFindMatch = () => {
+    setMatchStatus('searching');
+    socket.emit('find_match');
+  };
+
+  const handleCreatePrivate = () => {
+    // TODO: Emit create_private event
+  };
+
+  const handleJoinPrivate = (code: string) => {
+    // TODO: Emit join_private event
+  };
+
+  const handleConversationEnd = (blobs: Blob[]) => {
+    setRecordings(blobs);
+    setView('annotation');
+  };
+
+  const handleAnnotationComplete = () => {
+    setRecordings([]);
+    setMatchStatus('idle');
+    setPartnerData(null);
+    setView('lobby');
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main>
+      {view === 'login' && <Login onJoin={handleJoin} />}
+
+      {view === 'lobby' && userData && (
+        <Lobby
+          userData={userData}
+          onFindMatch={handleFindMatch}
+          onCreatePrivate={handleCreatePrivate}
+          onJoinPrivate={handleJoinPrivate}
+          matchStatus={matchStatus}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+
+      {view === 'conversation' && userData && partnerData && (
+        <ConversationRoom
+          socket={socket}
+          roomId={roomId}
+          userData={userData}
+          partnerData={partnerData}
+          onEnd={handleConversationEnd}
+        />
+      )}
+
+      {view === 'annotation' && (
+        <AnnotationView
+          recordings={recordings}
+          onComplete={handleAnnotationComplete}
+        />
+      )}
+    </main>
   );
 }
