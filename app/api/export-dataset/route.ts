@@ -129,8 +129,9 @@ export async function GET(request: NextRequest) {
     try {
         const zipBuffer = await createDatasetZip();
 
-        // Convert Node.js Buffer to Blob for NextResponse
-        const blob = new Blob([zipBuffer], { type: 'application/zip' });
+        // Convert Node.js Buffer to Uint8Array for Blob compatibility
+        const uint8Array = new Uint8Array(zipBuffer);
+        const blob = new Blob([uint8Array], { type: 'application/zip' });
 
         return new NextResponse(blob, {
             headers: {
