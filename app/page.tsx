@@ -112,7 +112,7 @@ export default function Home() {
       )}
 
       {view === 'admin' && (
-        <AdminView onBack={() => setView('login')} />
+        <AdminView onBack={() => setView(userData ? 'lobby' : 'login')} />
       )}
     </main>
   );
