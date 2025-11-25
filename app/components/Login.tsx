@@ -13,14 +13,18 @@ const INTERESTS = [
     'Travel', 'Politics', 'Media', 'Sports', 'Technology', 'Art', 'Music', 'Food', 'History', 'Science'
 ];
 
+const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+
 interface LoginProps {
-    onJoin: (data: { name: string; nationality: string; interests: string[] }) => void;
+    onJoin: (data: { name: string; nationality: string; interests: string[]; age: number; gender: string }) => void;
 }
 
 export default function Login({ onJoin }: LoginProps) {
     const [name, setName] = useState('');
     const [nationality, setNationality] = useState(NATIONALITIES[0]);
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+    const [age, setAge] = useState(25);
+    const [gender, setGender] = useState(GENDERS[0]);
 
     const toggleInterest = (interest: string) => {
         setSelectedInterests(prev =>
@@ -32,8 +36,8 @@ export default function Login({ onJoin }: LoginProps) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (name.trim()) {
-            onJoin({ name, nationality, interests: selectedInterests });
+        if (name.trim() && age >= 18 && age <= 100) {
+            onJoin({ name, nationality, interests: selectedInterests, age, gender });
         }
     };
 
@@ -71,6 +75,32 @@ export default function Login({ onJoin }: LoginProps) {
                     </div>
 
                     <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">Age</label>
+                        <input
+                            type="number"
+                            value={age}
+                            onChange={(e) => setAge(parseInt(e.target.value) || 18)}
+                            min="18"
+                            max="100"
+                            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">Gender</label>
+                        <select
+                            value={gender}
+                            onChange={(e) => setGender(e.target.value)}
+                            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none"
+                        >
+                            {GENDERS.map(g => (
+                                <option key={g} value={g} className="bg-slate-800">{g}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Interests</label>
                         <div className="flex flex-wrap gap-2">
                             {INTERESTS.map(interest => (
@@ -79,8 +109,8 @@ export default function Login({ onJoin }: LoginProps) {
                                     type="button"
                                     onClick={() => toggleInterest(interest)}
                                     className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${selectedInterests.includes(interest)
-                                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
-                                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
+                                        : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
                                         }`}
                                 >
                                     {interest}

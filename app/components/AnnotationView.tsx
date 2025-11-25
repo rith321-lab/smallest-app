@@ -11,6 +11,8 @@ export default function AnnotationView({ recordings, onComplete }: AnnotationVie
     const [currentIndex, setCurrentIndex] = useState(0);
     const [annotations, setAnnotations] = useState<string[]>(new Array(recordings.length).fill(''));
     const [transcribing, setTranscribing] = useState<boolean[]>(new Array(recordings.length).fill(false));
+    const [saving, setSaving] = useState(false);
+    const [saveProgress, setSaveProgress] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -93,26 +95,73 @@ export default function AnnotationView({ recordings, onComplete }: AnnotationVie
         }
     };
 
-    const handleSubmit = () => {
-        // In a real app, upload blobs and text to server
-        console.log('Submitting annotations:', annotations);
-        // Download JSON for verification
-        const data = {
-            annotations: annotations.map((text, i) => ({
-                segment: i + 1,
-                text,
-                // blob size for verification
-                size: recordings[i].size
-            }))
-        };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'annotations.json';
-        a.click();
+    const handleSubmit = async () => {
+        setSaving(true);
+        setSaveProgress(0);
 
-        onComplete();
+        try {
+            // Generate speaker ID from timestamp
+            const speakerId = Date.now().toString().slice(-4);
+
+            // Save each recording and transcript to server
+            for (let i = 0; i < recordings.length; i++) {
+                const sampleId = (i + 1).toString();
+
+                // Save audio
+                const audioFormData = new FormData();
+                audioFormData.append('audio', recordings[i], 'audio.webm');
+                audioFormData.append('speakerId', speakerId);
+                audioFormData.append('sampleId', sampleId);
+
+                const audioResponse = await fetch('/api/save-recording', {
+                    method: 'POST',
+                    body: audioFormData,
+                });
+
+                if (!audioResponse.ok) {
+                    throw new Error(`Failed to save recording ${i + 1}`);
+                }
+
+                // Save transcript
+                const transcriptResponse = await fetch('/api/save-transcript', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        speakerId,
+                        sampleId,
+                        transcript: annotations[i],
+                        soundEvents: [] // You could extract sound event tags from annotations
+                    }),
+                });
+
+                if (!transcriptResponse.ok) {
+                    throw new Error(`Failed to save transcript ${i + 1}`);
+                }
+
+                setSaveProgress(Math.round(((i + 1) / recordings.length) * 100));
+            }
+
+            // Also download JSON for backup
+            const data = {
+                annotations: annotations.map((text, i) => ({
+                    segment: i + 1,
+                    text,
+                    size: recordings[i].size
+                }))
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `annotations_${speakerId}.json`;
+            a.click();
+
+            onComplete();
+        } catch (error) {
+            console.error('Save error:', error);
+            alert('Failed to save recordings. Please try again.');
+            setSaving(false);
+        }
     };
 
     if (recordings.length === 0) {
