@@ -18,6 +18,7 @@ export default function Home() {
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
   const [roomId, setRoomId] = useState<string>('');
   const [recordings, setRecordings] = useState<Blob[]>([]);
+  const [conversationMetadata, setConversationMetadata] = useState<any>(null);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -58,16 +59,16 @@ export default function Home() {
   };
 
   const handleCreatePrivate = () => {
-    // TODO: Emit create_private event
+    socketRef.current?.emit('create_private');
   };
 
   const handleJoinPrivate = (code: string) => {
-    // TODO: Emit join_private event
-    console.log('Joining private room:', code);
+    socketRef.current?.emit('join_private', code);
   };
 
-  const handleConversationEnd = (blobs: Blob[]) => {
+  const handleConversationEnd = (blobs: Blob[], metadata: any) => {
     setRecordings(blobs);
+    setConversationMetadata(metadata);
     setView('annotation');
   };
 
@@ -109,6 +110,7 @@ export default function Home() {
       {view === 'annotation' && (
         <AnnotationView
           recordings={recordings}
+          metadata={conversationMetadata}
           onComplete={handleAnnotationComplete}
         />
       )}

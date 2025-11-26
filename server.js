@@ -15,6 +15,8 @@ app.prepare().then(() => {
     // Store connected users and queue
     const users = new Map(); // socket.id -> { name, nationality, interests }
     const queue = []; // Array of socket.id
+    const privateRooms = new Map(); // roomCode -> roomId
+    const conversationData = new Map(); // roomId -> { turnCount, startTime, totalDuration }
 
     io.on('connection', (socket) => {
         console.log('A user connected:', socket.id);
@@ -22,6 +24,53 @@ app.prepare().then(() => {
         socket.on('login', (userData) => {
             users.set(socket.id, userData);
             console.log('User logged in:', userData.name);
+        });
+
+        socket.on('create_private', () => {
+            const user = users.get(socket.id);
+            if (!user) return;
+
+            // Generate a 6-digit room code
+            const roomCode = Math.floor(100000 + Math.random() * 900000).toString();
+            const roomId = `private_${socket.id}_${roomCode}`;
+            privateRooms.set(roomCode, roomId);
+
+            socket.join(roomId);
+            socket.emit('private_room_created', { roomCode, roomId });
+            console.log(`${user.name} created private room with code: ${roomCode}`);
+        });
+
+        socket.on('join_private', (roomCode) => {
+            const user = users.get(socket.id);
+            if (!user) return;
+
+            const roomId = privateRooms.get(roomCode);
+            if (!roomId) {
+                socket.emit('join_error', { message: 'Invalid room code' });
+                return;
+            }
+
+            const room = io.sockets.adapter.rooms.get(roomId);
+            if (!room || room.size === 0) {
+                socket.emit('join_error', { message: 'Room not found' });
+                return;
+            }
+
+            if (room.size >= 2) {
+                socket.emit('join_error', { message: 'Room is full' });
+                return;
+            }
+
+            socket.join(roomId);
+            const partnerId = Array.from(room).find(id => id !== socket.id);
+            const partner = users.get(partnerId);
+
+            // Notify both
+            io.to(roomId).emit('match_found', { roomId });
+            socket.emit('partner_info', partner);
+            io.to(partnerId).emit('partner_info', user);
+
+            console.log(`${user.name} joined private room ${roomCode}`);
         });
 
         socket.on('find_match', () => {
@@ -74,6 +123,14 @@ app.prepare().then(() => {
         socket.on('ready_to_start', (roomId) => {
             const room = io.sockets.adapter.rooms.get(roomId);
             if (room && room.size === 2) {
+                // Initialize conversation data
+                conversationData.set(roomId, {
+                    turnCount: 0,
+                    startTime: Date.now(),
+                    totalDuration: 10 * 60 * 1000, // 10 minutes
+                    maxTurns: 20
+                });
+
                 // Start the conversation
                 // Decide who goes first randomly
                 const clients = Array.from(room);
@@ -86,6 +143,14 @@ app.prepare().then(() => {
 
                 // Start turn timer
                 startTurnTimer(roomId, firstSpeaker);
+
+                // Start total conversation timer (10 minutes)
+                setTimeout(() => {
+                    if (conversationData.has(roomId)) {
+                        io.to(roomId).emit('conversation_ended', { reason: 'time_limit' });
+                        cleanupRoom(roomId);
+                    }
+                }, 10 * 60 * 1000);
             }
         });
 
@@ -122,16 +187,46 @@ app.prepare().then(() => {
             const room = io.sockets.adapter.rooms.get(roomId);
             if (!room || room.size < 2) return;
 
+            const convData = conversationData.get(roomId);
+            if (!convData) return;
+
+            // Increment turn count
+            convData.turnCount++;
+
+            // Check if we reached max turns (20)
+            if (convData.turnCount >= convData.maxTurns) {
+                io.to(roomId).emit('conversation_ended', { reason: 'max_turns' });
+                cleanupRoom(roomId);
+                return;
+            }
+
             const clients = Array.from(room);
             const nextSpeaker = clients.find(id => id !== currentSpeakerId);
 
             io.to(roomId).emit('switch_turn', {
                 nextSpeaker,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                turnNumber: convData.turnCount + 1,
+                totalTurns: convData.maxTurns
             });
 
             startTurnTimer(roomId, nextSpeaker);
         }, DURATION);
+    }
+
+    function cleanupRoom(roomId) {
+        if (roomTimers[roomId]) {
+            clearTimeout(roomTimers[roomId]);
+            delete roomTimers[roomId];
+        }
+        conversationData.delete(roomId);
+        // Remove from privateRooms if it exists
+        for (const [code, id] of privateRooms.entries()) {
+            if (id === roomId) {
+                privateRooms.delete(code);
+                break;
+            }
+        }
     }
     server.all(/.*/, (req, res) => {
         return handle(req, res);

@@ -8,13 +8,17 @@ interface ConversationRoomProps {
     roomId: string;
     userData: { name: string; nationality: string };
     partnerData: { name: string; nationality: string };
-    onEnd: (recordings: Blob[]) => void;
+    onEnd: (recordings: Blob[], metadata: any) => void;
 }
 
 export default function ConversationRoom({ socket, roomId, userData, partnerData, onEnd }: ConversationRoomProps) {
     const [status, setStatus] = useState<'connecting' | 'waiting' | 'my_turn' | 'their_turn'>('connecting');
     const [timeLeft, setTimeLeft] = useState(30);
     const [recordings, setRecordings] = useState<Blob[]>([]);
+    const [turnNumber, setTurnNumber] = useState(1);
+    const [totalTurns, setTotalTurns] = useState(20);
+    const [elapsedTime, setElapsedTime] = useState(0);
+    const [speakerOrder, setSpeakerOrder] = useState<('A' | 'B')[]>([]); // Track who spoke each turn
 
     const localStreamRef = useRef<MediaStream | null>(null);
     const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -22,6 +26,8 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const currentChunkRef = useRef<Blob[]>([]);
     const recordingsRef = useRef<Blob[]>([]); // Track recordings synchronously
+    const conversationStartTime = useRef<number>(0);
+    const isUserSpeakerA = useRef<boolean>(false); // Track if user is speaker A
 
     useEffect(() => {
         // Initialize WebRTC and Socket listeners
@@ -107,9 +113,16 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
         // Game Logic Listeners
         socket.on('conversation_start', ({ firstSpeaker, startTime }) => {
-            setStatus(firstSpeaker === socket.id ? 'my_turn' : 'their_turn');
+            conversationStartTime.current = Date.now();
+            const iAmFirst = firstSpeaker === socket.id;
+            isUserSpeakerA.current = iAmFirst; // First speaker is A
+
+            setStatus(iAmFirst ? 'my_turn' : 'their_turn');
             setTimeLeft(30);
-            if (firstSpeaker === socket.id) {
+            setTurnNumber(1);
+            setSpeakerOrder([iAmFirst ? 'A' : 'B']); // First turn
+
+            if (iAmFirst) {
                 startRecording();
                 unmuteMic();
             } else {
@@ -117,9 +130,16 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             }
         });
 
-        socket.on('switch_turn', ({ nextSpeaker }) => {
+        socket.on('switch_turn', ({ nextSpeaker, turnNumber: turn, totalTurns: total }) => {
             setTimeLeft(30);
-            if (nextSpeaker === socket.id) {
+            if (turn) setTurnNumber(turn);
+            if (total) setTotalTurns(total);
+
+            const iAmSpeaking = nextSpeaker === socket.id;
+            const speaker = isUserSpeakerA.current === iAmSpeaking ? 'A' : 'B';
+            setSpeakerOrder(prev => [...prev, speaker]);
+
+            if (iAmSpeaking) {
                 setStatus('my_turn');
                 startRecording();
                 unmuteMic();
@@ -130,12 +150,20 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             }
         });
 
-        socket.on('conversation_ended', () => {
+        socket.on('conversation_ended', (data) => {
             stopRecording(); // Ensure last chunk is saved
             // Wait a bit for the last recording to be processed
             setTimeout(() => {
                 cleanup();
-                onEnd(recordingsRef.current); // Use ref to get all recordings
+                const metadata = {
+                    speakerOrder,
+                    userIsSpeakerA: isUserSpeakerA.current,
+                    userName: userData.name,
+                    partnerName: partnerData.name,
+                    totalTurns: speakerOrder.length,
+                    endReason: data?.reason || 'manual'
+                };
+                onEnd(recordingsRef.current, metadata);
             }, 100);
         });
 
@@ -149,10 +177,8 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         if (status === 'connecting' || status === 'waiting') return;
 
         const interval = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 0) return 0;
-                return prev - 1;
-            });
+            setTimeLeft(prev => Math.max(0, prev - 1));
+            setElapsedTime(Math.floor((Date.now() - conversationStartTime.current) / 1000));
         }, 1000);
 
         return () => clearInterval(interval);
@@ -239,6 +265,12 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                         </div>
                         <div className="text-xs uppercase tracking-widest text-slate-500 mt-1">
                             {status === 'my_turn' ? 'Your Turn' : status === 'their_turn' ? 'Listening' : 'Waiting'}
+                        </div>
+                        <div className="text-xs text-blue-400 mt-2">
+                            Turn {turnNumber}/{totalTurns}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                            {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')} / 10:00
                         </div>
                     </div>
 
