@@ -164,7 +164,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     endReason: data?.reason || 'manual'
                 };
                 onEnd(recordingsRef.current, metadata);
-            }, 100);
+            }, 500); // Increased delay to 500ms
         });
 
         return () => {
@@ -212,26 +212,32 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const startRecording = () => {
         if (!localStreamRef.current) return;
 
-        const recorder = new MediaRecorder(localStreamRef.current, {
-            mimeType: 'audio/webm;codecs=opus'
-            // Note: bitsPerSecond can be set here, but sampleRate is usually fixed by context
-        });
+        try {
+            const recorder = new MediaRecorder(localStreamRef.current, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
 
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-                currentChunkRef.current.push(e.data);
-            }
-        };
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    currentChunkRef.current.push(e.data);
+                }
+            };
 
-        recorder.onstop = () => {
-            const blob = new Blob(currentChunkRef.current, { type: 'audio/webm' });
-            recordingsRef.current = [...recordingsRef.current, blob]; // Update ref synchronously
-            setRecordings(prev => [...prev, blob]);
-            currentChunkRef.current = [];
-        };
+            recorder.onstop = () => {
+                const blob = new Blob(currentChunkRef.current, { type: 'audio/webm' });
+                if (blob.size > 0) {
+                    recordingsRef.current = [...recordingsRef.current, blob];
+                    setRecordings(prev => [...prev, blob]);
+                }
+                currentChunkRef.current = [];
+            };
 
-        recorder.start();
-        mediaRecorderRef.current = recorder;
+            // Request data every 1 second to ensure we capture everything even if stop is abrupt
+            recorder.start(1000);
+            mediaRecorderRef.current = recorder;
+        } catch (err) {
+            console.error('Failed to start recording:', err);
+        }
     };
 
     const stopRecording = () => {

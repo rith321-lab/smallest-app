@@ -172,18 +172,28 @@ function startTurnTimer(io, roomId, currentSpeakerId) {
 
     if (roomTimers[roomId]) clearTimeout(roomTimers[roomId]);
 
+    console.log(`Starting turn timer for room ${roomId}, current speaker: ${currentSpeakerId}`);
+
     roomTimers[roomId] = setTimeout(() => {
         const room = io.sockets.adapter.rooms.get(roomId);
-        if (!room || room.size < 2) return;
+        if (!room || room.size < 2) {
+            console.log(`Room ${roomId} invalid or empty, stopping timer`);
+            return;
+        }
 
         const convData = conversationData.get(roomId);
-        if (!convData) return;
+        if (!convData) {
+            console.log(`No conversation data for ${roomId}`);
+            return;
+        }
 
         // Increment turn count
         convData.turnCount++;
+        console.log(`Turn switched in ${roomId}. New count: ${convData.turnCount}`);
 
         // Check if we reached max turns (20)
         if (convData.turnCount >= convData.maxTurns) {
+            console.log(`Max turns reached in ${roomId}`);
             io.to(roomId).emit('conversation_ended', { reason: 'max_turns' });
             cleanupRoom(roomId);
             return;
