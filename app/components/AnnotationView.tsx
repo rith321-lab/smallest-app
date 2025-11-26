@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 
 interface AnnotationViewProps {
     recordings: Blob[];
+    metadata?: any;
     onComplete: () => void;
 }
 
-export default function AnnotationView({ recordings, onComplete }: AnnotationViewProps) {
+export default function AnnotationView({ recordings, metadata, onComplete }: AnnotationViewProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [annotations, setAnnotations] = useState<string[]>(new Array(recordings.length).fill(''));
     const [transcribing, setTranscribing] = useState<boolean[]>(new Array(recordings.length).fill(false));
