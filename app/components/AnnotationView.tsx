@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 
 interface AnnotationViewProps {
     recordings: Blob[];
@@ -9,27 +9,23 @@ interface AnnotationViewProps {
 }
 
 export default function AnnotationView({ recordings, metadata, onComplete }: AnnotationViewProps) {
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [annotations, setAnnotations] = useState<string[]>(new Array(recordings.length).fill(''));
-    const [transcribing, setTranscribing] = useState<boolean[]>(new Array(recordings.length).fill(false));
+    const [transcript, setTranscript] = useState('');
+    const [transcribing, setTranscribing] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [saveProgress, setSaveProgress] = useState(0);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
 
-    const currentBlob = recordings[currentIndex];
-    const audioUrl = currentBlob ? URL.createObjectURL(currentBlob) : '';
-
-    useEffect(() => {
-        return () => {
-            if (audioUrl) URL.revokeObjectURL(audioUrl);
-        };
-    }, [audioUrl]);
-
-    const handleAnnotationChange = (text: string) => {
-        const newAnnotations = [...annotations];
-        newAnnotations[currentIndex] = text;
-        setAnnotations(newAnnotations);
+    // Get speaker labels from metadata
+    const getSpeakerLabel = (index: number) => {
+        if (!metadata?.speakerOrder || !metadata.speakerOrder[index]) {
+            return `Turn ${index + 1}`;
+        }
+        const speaker = metadata.speakerOrder[index];
+        const speakerName = speaker === 'A'
+            ? (metadata.userIsSpeakerA ? metadata.userName : metadata.partnerName)
+            : (metadata.userIsSpeakerA ? metadata.partnerName : metadata.userName);
+        return `Turn ${index + 1} - Speaker ${speaker} (${speakerName})`;
     };
 
     const insertTag = (tag: string) => {
@@ -37,12 +33,10 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
 
         const start = textareaRef.current.selectionStart;
         const end = textareaRef.current.selectionEnd;
-        const text = annotations[currentIndex];
+        const text = transcript;
         const newText = text.substring(0, start) + tag + text.substring(end);
 
-        const newAnnotations = [...annotations];
-        newAnnotations[currentIndex] = newText;
-        setAnnotations(newAnnotations);
+        setTranscript(newText);
 
         setTimeout(() => {
             if (textareaRef.current) {
@@ -52,219 +46,212 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
         }, 0);
     };
 
-    const handleTranscribe = async () => {
-        const newTranscribing = [...transcribing];
-        newTranscribing[currentIndex] = true;
-        setTranscribing(newTranscribing);
+    const handleTranscribeAll = async () => {
+        setTranscribing(true);
+        let fullTranscript = '';
 
         try {
-            const formData = new FormData();
-            formData.append('audio', currentBlob, 'audio.webm');
+            for (let i = 0; i < recordings.length; i++) {
+                const blob = recordings[i];
+                const formData = new FormData();
+                formData.append('audio', blob, `turn_${i}.webm`);
 
-            const response = await fetch('/api/transcribe', {
+                const response = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    fullTranscript += `[${getSpeakerLabel(i)}]\n${data.text}\n\n`;
+                } else {
+                    fullTranscript += `[${getSpeakerLabel(i)}]\n[Transcription failed]\n\n`;
+                }
+            }
+
+            setTranscript(fullTranscript);
+        } catch (error) {
+            console.error('Transcription error:', error);
+            alert('Failed to transcribe audio. Please try again.');
+        } finally {
+            setTranscribing(false);
+        }
+    };
+
+    const handlePlayTurn = (index: number) => {
+        // Stop all other audio
+        audioRefs.current.forEach((audio, i) => {
+            if (audio && i !== index) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+        });
+
+        const audio = audioRefs.current[index];
+        if (audio) {
+            if (currentPlayingIndex === index) {
+                audio.pause();
+                setCurrentPlayingIndex(null);
+            } else {
+                audio.play();
+                setCurrentPlayingIndex(index);
+            }
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!transcript.trim()) {
+            alert('Please add a transcript before submitting.');
+            return;
+        }
+
+        setSaving(true);
+
+        try {
+            // Save conversation as unified file
+            const formData = new FormData();
+
+            // Add all recording blobs
+            recordings.forEach((blob, index) => {
+                formData.append(`recording_${index}`, blob, `turn_${index}.webm`);
+            });
+
+            // Add metadata
+            formData.append('speakerOrder', JSON.stringify(metadata?.speakerOrder || []));
+            formData.append('userName', metadata?.userName || 'User1');
+            formData.append('partnerName', metadata?.partnerName || 'User2');
+            formData.append('userIsSpeakerA', String(metadata?.userIsSpeakerA || false));
+            formData.append('turnCount', String(recordings.length));
+            formData.append('transcript', transcript);
+
+            const response = await fetch('/api/save-conversation', {
                 method: 'POST',
                 body: formData,
             });
 
             if (!response.ok) {
-                throw new Error('Transcription failed');
+                throw new Error('Failed to save conversation');
             }
 
             const data = await response.json();
-            const newAnnotations = [...annotations];
-            newAnnotations[currentIndex] = data.text;
-            setAnnotations(newAnnotations);
-        } catch (error) {
-            console.error('Transcription error:', error);
-            alert('Failed to transcribe audio. Please try again.');
-        } finally {
-            const newTranscribing = [...transcribing];
-            newTranscribing[currentIndex] = false;
-            setTranscribing(newTranscribing);
-        }
-    };
+            console.log('Conversation saved:', data);
 
-    const handleNext = () => {
-        if (currentIndex < recordings.length - 1) {
-            setCurrentIndex(prev => prev + 1);
-        }
-    };
-
-    const handlePrev = () => {
-        if (currentIndex > 0) {
-            setCurrentIndex(prev => prev - 1);
-        }
-    };
-
-    const handleSubmit = async () => {
-        setSaving(true);
-        setSaveProgress(0);
-
-        try {
-            // Generate speaker ID from timestamp
-            const speakerId = Date.now().toString().slice(-4);
-
-            // Save each recording and transcript to server
-            for (let i = 0; i < recordings.length; i++) {
-                const sampleId = (i + 1).toString();
-
-                // Save audio
-                const audioFormData = new FormData();
-                audioFormData.append('audio', recordings[i], 'audio.webm');
-                audioFormData.append('speakerId', speakerId);
-                audioFormData.append('sampleId', sampleId);
-
-                const audioResponse = await fetch('/api/save-recording', {
-                    method: 'POST',
-                    body: audioFormData,
-                });
-
-                if (!audioResponse.ok) {
-                    throw new Error(`Failed to save recording ${i + 1}`);
-                }
-
-                // Save transcript
-                const transcriptResponse = await fetch('/api/save-transcript', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        speakerId,
-                        sampleId,
-                        transcript: annotations[i],
-                        soundEvents: [] // You could extract sound event tags from annotations
-                    }),
-                });
-
-                if (!transcriptResponse.ok) {
-                    throw new Error(`Failed to save transcript ${i + 1}`);
-                }
-
-                setSaveProgress(Math.round(((i + 1) / recordings.length) * 100));
-            }
-
-            // Also download JSON for backup
-            const data = {
-                annotations: annotations.map((text, i) => ({
-                    segment: i + 1,
-                    text,
-                    size: recordings[i].size
-                }))
-            };
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `annotations_${speakerId}.json`;
-            a.click();
-
+            alert('Conversation saved successfully!');
             onComplete();
         } catch (error) {
             console.error('Save error:', error);
-            alert('Failed to save recordings. Please try again.');
+            alert('Failed to save conversation. Please try again.');
+        } finally {
             setSaving(false);
         }
     };
 
-    if (recordings.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white">
-                <h2 className="text-2xl font-bold mb-4">No recordings found.</h2>
-                <button onClick={onComplete} className="text-blue-400 hover:underline">Return to Lobby</button>
-            </div>
-        );
-    }
-
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-4">
-            <div className="w-full max-w-3xl bg-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-700">
-                <h2 className="text-2xl font-bold mb-6 text-center">Annotation Phase</h2>
-
-                <div className="flex justify-between items-center mb-4 text-slate-400 text-sm">
-                    <span>Segment {currentIndex + 1} of {recordings.length}</span>
-                    <span>{Math.round(currentBlob.size / 1024)} KB</span>
+        <div className="flex flex-col items-center min-h-screen bg-slate-900 text-white p-4">
+            <div className="w-full max-w-6xl bg-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-700 my-8">
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                        Annotate Conversation
+                    </h1>
+                    <p className="text-slate-400 mt-2">
+                        Review all {recordings.length} turns and add a combined transcript
+                    </p>
                 </div>
 
-                {/* Audio Player */}
-                <div className="bg-slate-900 p-6 rounded-xl mb-4 flex flex-col items-center gap-4">
-                    <audio
-                        ref={audioRef}
-                        src={audioUrl}
-                        controls
-                        className="w-full"
-                        key={currentIndex} // Force reload on change
-                    />
-                    <button
-                        onClick={handleTranscribe}
-                        disabled={transcribing[currentIndex]}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-lg shadow-purple-500/20 transition-all flex items-center gap-2"
-                    >
-                        {transcribing[currentIndex] ? (
-                            <>
-                                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Transcribing...
-                            </>
-                        ) : (
-                            <>🎙️ Auto-Transcribe</>
-                        )}
-                    </button>
-                </div>
-
-                {/* Text Input */}
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Transcribe and annotate your speech:
-                    </label>
-
-                    <div className="flex gap-2 mb-2">
-                        {['[Laugh]', '[Cough]', '[Sigh]', '[Noise]'].map(tag => (
-                            <button
-                                key={tag}
-                                onClick={() => insertTag(tag)}
-                                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-xs rounded-full border border-slate-600 transition-colors"
+                {/* Audio Recordings List */}
+                <div className="mb-8">
+                    <h2 className="text-xl font-semibold mb-4">Recordings ({recordings.length} turns)</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {recordings.map((blob, index) => (
+                            <div
+                                key={index}
+                                className="bg-slate-700 p-4 rounded-lg border border-slate-600 hover:border-blue-500 transition-colors"
                             >
-                                {tag}
-                            </button>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="font-medium text-sm">
+                                        {getSpeakerLabel(index)}
+                                    </span>
+                                    <button
+                                        onClick={() => handlePlayTurn(index)}
+                                        className={`px-3 py-1 rounded ${currentPlayingIndex === index
+                                                ? 'bg-red-600 hover:bg-red-500'
+                                                : 'bg-blue-600 hover:bg-blue-500'
+                                            } transition-colors text-sm`}
+                                    >
+                                        {currentPlayingIndex === index ? '⏸ Pause' : '▶ Play'}
+                                    </button>
+                                </div>
+                                <audio
+                                    ref={(el) => (audioRefs.current[index] = el)}
+                                    src={URL.createObjectURL(blob)}
+                                    onEnded={() => setCurrentPlayingIndex(null)}
+                                    className="hidden"
+                                />
+                            </div>
                         ))}
                     </div>
+                </div>
 
+                {/* Sound Event Buttons */}
+                <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Quick Insert Tags</label>
+                    <div className="flex gap-2 flex-wrap">
+                        <button onClick={() => insertTag('[Laugh]')} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                            [Laugh]
+                        </button>
+                        <button onClick={() => insertTag('[Cough]')} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                            [Cough]
+                        </button>
+                        <button onClick={() => insertTag('[Sigh]')} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                            [Sigh]
+                        </button>
+                        <button onClick={() => insertTag('[Noise]')} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                            [Noise]
+                        </button>
+                    </div>
+                </div>
+
+                {/* Transcript Textarea */}
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium">Full Conversation Transcript</label>
+                        <button
+                            onClick={handleTranscribeAll}
+                            disabled={transcribing || recordings.length === 0}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors text-sm"
+                        >
+                            {transcribing ? 'Auto-Transcribing...' : '🎤 Auto-Transcribe All'}
+                        </button>
+                    </div>
                     <textarea
                         ref={textareaRef}
-                        value={annotations[currentIndex]}
-                        onChange={(e) => handleAnnotationChange(e.target.value)}
-                        className="w-full h-40 p-4 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                        placeholder="Type here..."
+                        value={transcript}
+                        onChange={(e) => setTranscript(e.target.value)}
+                        className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 resize-none font-mono text-sm"
+                        placeholder="Type or auto-transcribe the conversation here. Each turn will be labeled with [Turn X - Speaker A/B (Name)]..."
                     />
+                    <p className="text-xs text-slate-500 mt-2">
+                        Tip: Use the buttons above to insert sound event tags like [Laugh], [Cough], etc.
+                    </p>
                 </div>
 
-                {/* Navigation */}
-                <div className="flex justify-between items-center">
+                {/* Submit Button */}
+                <div className="flex gap-4">
                     <button
-                        onClick={handlePrev}
-                        disabled={currentIndex === 0}
-                        className="px-4 py-2 bg-slate-700 rounded-lg disabled:opacity-50 hover:bg-slate-600 transition-all"
+                        onClick={handleSubmit}
+                        disabled={saving || !transcript.trim()}
+                        className="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg shadow-lg transition-all"
                     >
-                        Previous
+                        {saving ? 'Saving Conversation...' : '💾 Save Conversation'}
                     </button>
-
-                    {currentIndex === recordings.length - 1 ? (
-                        <button
-                            onClick={handleSubmit}
-                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg shadow-emerald-500/20 transition-all"
-                        >
-                            Submit All
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleNext}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 transition-all"
-                        >
-                            Next Segment
-                        </button>
-                    )}
                 </div>
+
+                {saving && (
+                    <div className="mt-4 text-center text-sm text-slate-400">
+                        Concatenating audio and saving conversation...
+                    </div>
+                )}
             </div>
         </div>
     );
