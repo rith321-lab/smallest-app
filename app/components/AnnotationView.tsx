@@ -175,15 +175,15 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                                     <button
                                         onClick={() => handlePlayTurn(index)}
                                         className={`px-3 py-1 rounded ${currentPlayingIndex === index
-                                                ? 'bg-red-600 hover:bg-red-500'
-                                                : 'bg-blue-600 hover:bg-blue-500'
+                                            ? 'bg-red-600 hover:bg-red-500'
+                                            : 'bg-blue-600 hover:bg-blue-500'
                                             } transition-colors text-sm`}
                                     >
                                         {currentPlayingIndex === index ? '⏸ Pause' : '▶ Play'}
                                     </button>
                                 </div>
                                 <audio
-                                    ref={(el) => (audioRefs.current[index] = el)}
+                                    ref={(el) => { audioRefs.current[index] = el; }}
                                     src={URL.createObjectURL(blob)}
                                     onEnded={() => setCurrentPlayingIndex(null)}
                                     className="hidden"
