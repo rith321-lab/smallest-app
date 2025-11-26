@@ -212,10 +212,21 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const startRecording = () => {
         if (!localStreamRef.current) return;
 
+        // Ensure previous recorder is stopped
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+
         try {
-            const recorder = new MediaRecorder(localStreamRef.current, {
-                mimeType: 'audio/webm;codecs=opus'
-            });
+            let options: MediaRecorderOptions = {};
+            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                options = { mimeType: 'audio/webm;codecs=opus' };
+            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/webm' };
+            }
+            // Safari often supports empty options best, or audio/mp4, but let's stick to webm preference or default
+
+            const recorder = new MediaRecorder(localStreamRef.current, options);
 
             recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
@@ -232,7 +243,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                 currentChunkRef.current = [];
             };
 
-            // Request data every 1 second to ensure we capture everything even if stop is abrupt
+            // Request data every 1 second
             recorder.start(1000);
             mediaRecorderRef.current = recorder;
         } catch (err) {
