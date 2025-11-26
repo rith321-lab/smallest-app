@@ -15,9 +15,9 @@ describe('Backend Tests', () => {
         httpServer = createServer(app);
         io = new Server(httpServer);
 
-        app.get('/api/test', (req, res) => {
-            res.status(200).json({ message: 'Hello World' });
-        });
+        // Use the real socket handler
+        const setupSocketIO = require('../socketHandler');
+        setupSocketIO(io);
 
         httpServer.listen(() => {
             const port = httpServer.address().port;
@@ -35,17 +35,27 @@ describe('Backend Tests', () => {
         httpServer.close();
     });
 
-    test('should respond to HTTP GET request', async () => {
-        const response = await request(app).get('/api/test');
-        expect(response.statusCode).toBe(200);
-        expect(response.body.message).toBe('Hello World');
+    test('should handle login event', (done) => {
+        const userData = { name: 'Test User', nationality: 'Testland', interests: [] };
+        // We can't easily verify the server state without exposing it, 
+        // but we can verify we don't crash and maybe check logs if we could spy on console.
+        // For now, just emit and ensure no error.
+        clientSocket.emit('login', userData);
+        // Give it a moment to process
+        setTimeout(() => {
+            done();
+        }, 100);
     });
 
-    test('should work with Socket.IO', (done) => {
-        clientSocket.on('hello', (arg) => {
-            expect(arg).toBe('world');
+    test('should create private room', (done) => {
+        clientSocket.emit('login', { name: 'Test User' });
+
+        clientSocket.on('private_room_created', (data) => {
+            expect(data.roomCode).toBeDefined();
+            expect(data.roomId).toBeDefined();
             done();
         });
-        serverSocket.emit('hello', 'world');
+
+        clientSocket.emit('create_private');
     });
 });
