@@ -22,15 +22,7 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
     }
 });
 
-global.RTCPeerConnection = jest.fn().mockImplementation(() => ({
-    addTrack: jest.fn(),
-    createAnswer: jest.fn().mockResolvedValue({ type: 'answer', sdp: 'sdp' }),
-    setLocalDescription: jest.fn(),
-    setRemoteDescription: jest.fn(),
-    close: jest.fn(),
-    ontrack: null,
-    onicecandidate: null
-})) as any;
+
 
 (global.RTCPeerConnection as any).generateCertificate = jest.fn().mockResolvedValue({});
 
