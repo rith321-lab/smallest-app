@@ -184,6 +184,14 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         return () => clearInterval(interval);
     }, [status]);
 
+    // Ensure audio plays when it's their turn
+    useEffect(() => {
+        if (status === 'their_turn' && remoteAudioRef.current) {
+            remoteAudioRef.current.muted = false;
+            remoteAudioRef.current.play().catch(e => console.error('Error playing remote audio:', e));
+        }
+    }, [status]);
+
     const cleanup = () => {
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
