@@ -57,6 +57,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                 peer.ontrack = (event) => {
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
+                        remoteAudioRef.current.play().catch(e => console.error('Error playing remote audio ontrack:', e));
                     }
                 };
 
@@ -112,7 +113,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         init();
 
         // Game Logic Listeners
-        socket.on('conversation_start', ({ firstSpeaker, startTime }) => {
+        socket.on('conversation_start', async ({ firstSpeaker, startTime }) => {
             conversationStartTime.current = Date.now();
             const iAmFirst = firstSpeaker === socket.id;
             isUserSpeakerA.current = iAmFirst; // First speaker is A
@@ -125,6 +126,17 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             if (iAmFirst) {
                 startRecording();
                 unmuteMic();
+
+                // Initiate WebRTC Call
+                try {
+                    if (peerRef.current) {
+                        const offer = await peerRef.current.createOffer();
+                        await peerRef.current.setLocalDescription(offer);
+                        socket.emit('signal', { to: roomId, signal: offer });
+                    }
+                } catch (err) {
+                    console.error('Error creating offer:', err);
+                }
             } else {
                 muteMic();
             }
