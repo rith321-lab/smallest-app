@@ -9,9 +9,11 @@ interface LobbyProps {
     onJoinPrivate: (code: string) => void;
     matchStatus: 'idle' | 'searching' | 'matched';
     onAdmin: () => void;
+    privateRoomCode?: string;
+    error?: string | null;
 }
 
-export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPrivate, matchStatus, onAdmin }: LobbyProps) {
+export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPrivate, matchStatus, onAdmin, privateRoomCode, error }: LobbyProps) {
     const [joinCode, setJoinCode] = useState('');
 
     return (
@@ -41,6 +43,12 @@ export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPr
                     </div>
                 </div>
 
+                {error && (
+                    <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm text-center animate-pulse">
+                        ⚠️ {error}
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Random Match */}
                     <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all group">
@@ -67,20 +75,32 @@ export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPr
                             Create a room or join a friend.
                         </p>
                         <div className="space-y-3">
-                            <button
-                                onClick={onCreatePrivate}
-                                className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-all shadow-lg shadow-emerald-500/20"
-                            >
-                                Create Room
-                            </button>
-                            <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-slate-600"></div>
+                            {privateRoomCode ? (
+                                <div className="text-center p-4 bg-emerald-900/50 rounded-lg border border-emerald-500/30">
+                                    <p className="text-sm text-emerald-300 mb-1">Room Code:</p>
+                                    <div className="text-3xl font-mono font-bold text-white tracking-widest mb-2">
+                                        {privateRoomCode}
+                                    </div>
+                                    <p className="text-xs text-slate-400 animate-pulse">Waiting for partner to join...</p>
                                 </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-slate-800 px-2 text-slate-500">Or join</span>
-                                </div>
-                            </div>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={onCreatePrivate}
+                                        className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-all shadow-lg shadow-emerald-500/20"
+                                    >
+                                        Create Room
+                                    </button>
+                                    <div className="relative my-3">
+                                        <div className="absolute inset-0 flex items-center">
+                                            <div className="w-full border-t border-slate-600"></div>
+                                        </div>
+                                        <div className="relative flex justify-center text-xs uppercase">
+                                            <span className="bg-slate-800 px-2 text-slate-500">Or join</span>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                             <div className="flex gap-2">
                                 <input
                                     type="text"

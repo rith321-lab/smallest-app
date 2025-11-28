@@ -17,6 +17,8 @@ export default function Home() {
   const [partnerData, setPartnerData] = useState<{ name: string; nationality: string } | null>(null);
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
   const [roomId, setRoomId] = useState<string>('');
+  const [privateRoomCode, setPrivateRoomCode] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<Blob[]>([]);
   const [conversationMetadata, setConversationMetadata] = useState<any>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -33,8 +35,18 @@ export default function Home() {
     socket.on('match_found', ({ roomId }) => {
       setRoomId(roomId);
       setMatchStatus('matched');
-      // Wait for partner info before switching? 
-      // Actually partner_info comes separately.
+      setError(null);
+    });
+
+    socket.on('private_room_created', ({ roomCode }) => {
+      setPrivateRoomCode(roomCode);
+      setError(null);
+    });
+
+    socket.on('join_error', ({ message }) => {
+      setError(message);
+      // Clear error after 3 seconds
+      setTimeout(() => setError(null), 3000);
     });
 
     socket.on('partner_info', (partner) => {
@@ -55,14 +67,17 @@ export default function Home() {
 
   const handleFindMatch = () => {
     setMatchStatus('searching');
+    setError(null);
     socketRef.current?.emit('find_match');
   };
 
   const handleCreatePrivate = () => {
+    setError(null);
     socketRef.current?.emit('create_private');
   };
 
   const handleJoinPrivate = (code: string) => {
+    setError(null);
     socketRef.current?.emit('join_private', code);
   };
 
@@ -75,6 +90,9 @@ export default function Home() {
   const handleAnnotationComplete = () => {
     setRecordings([]);
     setView('lobby');
+    setPrivateRoomCode(''); // Reset private room code
+    setMatchStatus('idle');
+    setError(null);
   };
 
   return (
@@ -94,6 +112,8 @@ export default function Home() {
           onJoinPrivate={handleJoinPrivate}
           matchStatus={matchStatus}
           onAdmin={() => setView('admin')}
+          privateRoomCode={privateRoomCode}
+          error={error}
         />
       )}
 

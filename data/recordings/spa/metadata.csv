@@ -1,2 +1,3 @@
 file_name,speaker_id,age,gender,language,dialect,duration_sec,recording_device,notes
-spa_9999_001.wav,9999,0,Unknown,Spanish,Latin American,30,Browser WebRTC,Recorded via Spanish Annotator Platform
+spa_7777_999.wav,7777,0,Unknown,Spanish,Latin American,30,Browser WebRTC,Recorded via Spanish Annotator Platform
+spa_conv_1764133965668_3308.wav,0000,0,Unknown,Spanish,Latin American,30,Browser WebRTC,Recorded via Spanish Annotator Platform

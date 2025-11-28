@@ -218,11 +218,13 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         }
 
         try {
-            let options: MediaRecorderOptions = {};
+            let options: MediaRecorderOptions = {
+                audioBitsPerSecond: 128000
+            };
             if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                options = { mimeType: 'audio/webm;codecs=opus' };
+                options = { ...options, mimeType: 'audio/webm;codecs=opus' };
             } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/webm' };
+                options = { ...options, mimeType: 'audio/webm' };
             }
             // Safari often supports empty options best, or audio/mp4, but let's stick to webm preference or default
 
@@ -320,6 +322,11 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                 <div className="w-2 h-6 bg-emerald-500 animate-[bounce_0.8s_infinite]"></div>
                             </div>
                             <div className="z-10 text-emerald-400 font-bold text-xl ml-4">Listening...</div>
+                            {/* Visual indicator that audio is active */}
+                            <div className="absolute bottom-4 right-4 flex items-center gap-2 text-xs text-emerald-400/70">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                Audio Active
+                            </div>
                         </div>
                     )}
 
@@ -339,7 +346,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                 </div>
 
                 {/* Hidden Audio Element for Remote Stream */}
-                <audio ref={remoteAudioRef} autoPlay />
+                <audio ref={remoteAudioRef} autoPlay playsInline controls={false} />
             </div>
         </div>
     );

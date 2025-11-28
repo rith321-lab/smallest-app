@@ -70,9 +70,40 @@ function setupSocketIO(io) {
             // Check if already in queue
             if (queue.includes(socket.id)) return;
 
-            // Simple matchmaking: if queue has someone, pair them
+            // Matchmaking Logic
             if (queue.length > 0) {
-                const partnerId = queue.shift();
+                let partnerId = null;
+                let partnerIndex = -1;
+
+                // 1. Try to find a match with shared interests
+                for (let i = 0; i < queue.length; i++) {
+                    const potentialPartnerId = queue[i];
+                    const potentialPartner = users.get(potentialPartnerId);
+
+                    if (potentialPartner) {
+                        const sharedInterests = user.interests.filter(interest =>
+                            potentialPartner.interests.includes(interest)
+                        );
+
+                        if (sharedInterests.length > 0) {
+                            partnerId = potentialPartnerId;
+                            partnerIndex = i;
+                            console.log(`Match found based on shared interests: ${sharedInterests.join(', ')}`);
+                            break;
+                        }
+                    }
+                }
+
+                // 2. Fallback: If no interest match, take the first person (FIFO)
+                if (!partnerId) {
+                    partnerId = queue[0];
+                    partnerIndex = 0;
+                    console.log('No interest match found, using fallback (FIFO)');
+                }
+
+                // Remove partner from queue
+                queue.splice(partnerIndex, 1);
+
                 const partner = users.get(partnerId);
 
                 // Create a unique room ID
