@@ -71,7 +71,19 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
                 // Create Peer Connection
                 const peer = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ]
                 });
                 peerRef.current = peer;
 
@@ -96,15 +108,15 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     }
                 };
 
-                // Timeout: If WebRTC doesn't connect in 10 seconds, proceed anyway
+                // Timeout: If WebRTC doesn't connect in 15 seconds, proceed with warning
                 connectionTimeoutRef.current = setTimeout(() => {
                     if (!isReadyToStartRef.current) {
-                        console.warn('WebRTC connection timeout - proceeding anyway');
+                        console.warn('WebRTC connection timeout after 15s - proceeding with degraded quality');
                         setConnectionStatus('timeout');
                         socket.emit('ready_to_start', roomId);
                         isReadyToStartRef.current = true;
                     }
-                }, 10000);
+                }, 15000);
 
                 // Add local tracks
                 stream.getTracks().forEach(track => peer.addTrack(track, stream));
@@ -600,8 +612,10 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                             : 'bg-slate-700 text-slate-400'
                                 }`}>
                                 {connectionStatus === 'timeout'
-                                    ? 'Connection timeout - Starting anyway'
-                                    : `Status: ${connectionStatus}`}
+                                    ? '⚠️ Audio quality may be degraded'
+                                    : connectionStatus === 'failed'
+                                        ? '❌ Audio connection failed'
+                                        : `Status: ${connectionStatus}`}
                             </div>
                         </div>
                     )}
@@ -611,12 +625,12 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                             <div className="text-slate-400">Establishing Audio Connection...</div>
                             <div className={`text-xs px-2 py-1 rounded ${connectionStatus === 'connected' || connectionStatus === 'completed'
-                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                    : connectionStatus === 'timeout'
-                                        ? 'bg-yellow-500/20 text-yellow-400'
-                                        : connectionStatus === 'failed'
-                                            ? 'bg-red-500/20 text-red-400'
-                                            : 'bg-slate-700 text-slate-400'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : connectionStatus === 'timeout'
+                                    ? 'bg-yellow-500/20 text-yellow-400'
+                                    : connectionStatus === 'failed'
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : 'bg-slate-700 text-slate-400'
                                 }`}>
                                 {connectionStatus === 'timeout'
                                     ? 'Connection timeout - Starting anyway'
