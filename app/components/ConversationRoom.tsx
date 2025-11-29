@@ -218,21 +218,29 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
         // Game Logic Listeners
         socket.on('conversation_start', async ({ firstSpeaker, startTime }) => {
-            console.log('Conversation starting! Audio should be ready.');
+            console.log('=== CONVERSATION_START EVENT ===');
+            console.log('First speaker:', firstSpeaker);
+            console.log('My socket ID:', socket.id);
+            console.log('Start time:', startTime);
+
             conversationStartTime.current = Date.now();
             const iAmFirst = firstSpeaker === socket.id;
             isUserSpeakerA.current = iAmFirst; // First speaker is A
             currentTurnRef.current = 1;
 
-            setStatus(iAmFirst ? 'my_turn' : 'their_turn');
+            const newStatus = iAmFirst ? 'my_turn' : 'their_turn';
+            console.log('Setting status to:', newStatus);
+            setStatus(newStatus);
             setTimeLeft(30);
             setTurnNumber(1);
             setSpeakerOrder([iAmFirst ? 'A' : 'B']); // First turn
 
             if (iAmFirst) {
+                console.log('I am speaking first - starting local recording');
                 unmuteMic();
                 startRecording();
             } else {
+                console.log('Partner is speaking first - starting remote recording');
                 muteMic();
                 // Start recording partner's audio
                 startRemoteRecording();
