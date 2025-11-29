@@ -50,6 +50,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]); // Queue ICE candidates
     const makingOfferRef = useRef<boolean>(false); // Track if we're making an offer
     const isReadyToStartRef = useRef<boolean>(false); // Track if we have told server we are ready
+    const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         // Initialize WebRTC and Socket listeners
@@ -83,6 +84,9 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                         // Only signal ready when we have a solid connection
                         if (!isReadyToStartRef.current) {
                             console.log('Audio connected! Signaling ready to start.');
+                            if (connectionTimeoutRef.current) {
+                                clearTimeout(connectionTimeoutRef.current);
+                            }
                             socket.emit('ready_to_start', roomId);
                             isReadyToStartRef.current = true;
                         }
@@ -91,6 +95,16 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                         // Optionally handle reconnection logic here
                     }
                 };
+
+                // Timeout: If WebRTC doesn't connect in 10 seconds, proceed anyway
+                connectionTimeoutRef.current = setTimeout(() => {
+                    if (!isReadyToStartRef.current) {
+                        console.warn('WebRTC connection timeout - proceeding anyway');
+                        setConnectionStatus('timeout');
+                        socket.emit('ready_to_start', roomId);
+                        isReadyToStartRef.current = true;
+                    }
+                }, 10000);
 
                 // Add local tracks
                 stream.getTracks().forEach(track => peer.addTrack(track, stream));
@@ -265,6 +279,9 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         });
 
         return () => {
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+            }
             cleanup();
         };
     }, [roomId, socket]);
@@ -576,15 +593,36 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                             <div className="text-slate-400">Establishing Audio Connection...</div>
                             <div className={`text-xs px-2 py-1 rounded ${connectionStatus === 'connected' || connectionStatus === 'completed'
                                     ? 'bg-emerald-500/20 text-emerald-400'
-                                    : 'bg-slate-700 text-slate-400'
+                                    : connectionStatus === 'timeout'
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : connectionStatus === 'failed'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-slate-700 text-slate-400'
                                 }`}>
-                                Status: {connectionStatus}
+                                {connectionStatus === 'timeout'
+                                    ? 'Connection timeout - Starting anyway'
+                                    : `Status: ${connectionStatus}`}
                             </div>
                         </div>
                     )}
 
                     {status === 'connecting' && (
-                        <div className="text-slate-500">Initializing...</div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-slate-400">Establishing Audio Connection...</div>
+                            <div className={`text-xs px-2 py-1 rounded ${connectionStatus === 'connected' || connectionStatus === 'completed'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : connectionStatus === 'timeout'
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : connectionStatus === 'failed'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-slate-700 text-slate-400'
+                                }`}>
+                                {connectionStatus === 'timeout'
+                                    ? 'Connection timeout - Starting anyway'
+                                    : `Status: ${connectionStatus}`}
+                            </div>
+                        </div>
                     )}
                 </div>
 
