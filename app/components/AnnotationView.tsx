@@ -73,6 +73,23 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
             return;
         }
 
+        // Validate recordings
+        const silentCount = recordings.filter(blob => blob.size === 0).length;
+        const totalRecordings = recordings.length;
+
+        if (totalRecordings === 0) {
+            alert('No recordings found. Cannot save conversation.');
+            return;
+        }
+
+        if (silentCount === totalRecordings) {
+            const confirmSave = confirm('⚠️ Warning: All recordings are silent (0 bytes). This likely means audio was not captured. Do you still want to save?');
+            if (!confirmSave) return;
+        } else if (silentCount > 0) {
+            const confirmSave = confirm(`⚠️ Warning: ${silentCount} out of ${totalRecordings} recordings are silent. This may indicate audio issues. Continue saving?`);
+            if (!confirmSave) return;
+        }
+
         setSaving(true);
 
         try {

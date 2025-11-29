@@ -277,15 +277,35 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             // Wait a bit for the last recordings to be processed
             setTimeout(() => {
                 cleanup();
+
+                // Validate recordings
+                const expectedTurns = speakerOrder.length;
+                const actualRecordings = recordingsRef.current.length;
+
+                console.log(`Conversation ended: Expected ${expectedTurns} turns, got ${actualRecordings} recordings`);
+
+                // Count silent recordings
+                const silentCount = recordingsRef.current.filter(blob => blob.size === 0).length;
+                if (silentCount > 0) {
+                    console.warn(`Warning: ${silentCount} recordings are silent (0 bytes)`);
+                }
+
+                // Log if recordings count doesn't match turns
+                if (actualRecordings !== expectedTurns) {
+                    console.warn(`Recording count mismatch! Expected ${expectedTurns}, got ${actualRecordings}`);
+                }
+
                 const metadata = {
                     speakerOrder,
                     userIsSpeakerA: isUserSpeakerA.current,
                     userName: userData.name,
                     partnerName: partnerData.name,
                     totalTurns: speakerOrder.length,
-                    endReason: data?.reason || 'manual'
+                    endReason: data?.reason || 'manual',
+                    silentRecordings: silentCount,
+                    recordingCount: actualRecordings
                 };
-                console.log('Ending conversation with recordings:', recordingsRef.current.length);
+
                 onEnd(recordingsRef.current, metadata);
             }, 800); // Increased delay for both recorders to finish
         });
@@ -604,12 +624,12 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                             <div className="text-slate-400">Establishing Audio Connection...</div>
                             <div className={`text-xs px-2 py-1 rounded ${connectionStatus === 'connected' || connectionStatus === 'completed'
-                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                    : connectionStatus === 'timeout'
-                                        ? 'bg-yellow-500/20 text-yellow-400'
-                                        : connectionStatus === 'failed'
-                                            ? 'bg-red-500/20 text-red-400'
-                                            : 'bg-slate-700 text-slate-400'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : connectionStatus === 'timeout'
+                                    ? 'bg-yellow-500/20 text-yellow-400'
+                                    : connectionStatus === 'failed'
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : 'bg-slate-700 text-slate-400'
                                 }`}>
                                 {connectionStatus === 'timeout'
                                     ? '⚠️ Audio quality may be degraded'
