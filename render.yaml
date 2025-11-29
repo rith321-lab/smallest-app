@@ -10,3 +10,7 @@ services:
         value: production
       - key: OPENAI_API_KEY
         sync: false
+    disk:
+      name: recordings
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

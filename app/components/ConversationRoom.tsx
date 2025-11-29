@@ -21,6 +21,7 @@ interface ConversationRoomProps {
 
 export default function ConversationRoom({ socket, roomId, userData, partnerData, onEnd }: ConversationRoomProps) {
     const [status, setStatus] = useState<'connecting' | 'waiting' | 'my_turn' | 'their_turn'>('connecting');
+    const [connectionStatus, setConnectionStatus] = useState<string>('initializing'); // new, checking, connected, etc.
     const [timeLeft, setTimeLeft] = useState(30);
     const [recordings, setRecordings] = useState<Blob[]>([]);
     const [turnNumber, setTurnNumber] = useState(1);
@@ -31,7 +32,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const [playingIndex, setPlayingIndex] = useState<number | null>(null);
     const [showHistory, setShowHistory] = useState(true);
     const [isSequentialPlayback, setIsSequentialPlayback] = useState(false);
-    
+
     const historyAudioRef = useRef<HTMLAudioElement | null>(null);
 
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -48,6 +49,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
     const remoteStreamRef = useRef<MediaStream | null>(null); // Store remote stream for recording
     const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]); // Queue ICE candidates
     const makingOfferRef = useRef<boolean>(false); // Track if we're making an offer
+    const isReadyToStartRef = useRef<boolean>(false); // Track if we have told server we are ready
 
     useEffect(() => {
         // Initialize WebRTC and Socket listeners
@@ -58,7 +60,9 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     audio: {
                         sampleRate: 24000,
                         channelCount: 1,
-                        echoCancellation: true
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
                     },
                     video: false
                 });
@@ -70,11 +74,30 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                 });
                 peerRef.current = peer;
 
+                // Monitor Connection State
+                peer.oniceconnectionstatechange = () => {
+                    console.log('ICE Connection State:', peer.iceConnectionState);
+                    setConnectionStatus(peer.iceConnectionState);
+
+                    if (peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed') {
+                        // Only signal ready when we have a solid connection
+                        if (!isReadyToStartRef.current) {
+                            console.log('Audio connected! Signaling ready to start.');
+                            socket.emit('ready_to_start', roomId);
+                            isReadyToStartRef.current = true;
+                        }
+                    } else if (peer.iceConnectionState === 'failed' || peer.iceConnectionState === 'disconnected') {
+                        console.warn('ICE Connection failed or disconnected');
+                        // Optionally handle reconnection logic here
+                    }
+                };
+
                 // Add local tracks
                 stream.getTracks().forEach(track => peer.addTrack(track, stream));
 
                 // Handle remote stream
                 peer.ontrack = (event) => {
+                    console.log('Received remote track');
                     remoteStreamRef.current = event.streams[0];
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
@@ -94,15 +117,15 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     if (data.from === socket.id) return; // Ignore self
 
                     const { signal } = data;
-                    
+
                     try {
                         if (signal.type === 'offer') {
                             // Handle offer - check if we can accept it
                             const offerCollision = makingOfferRef.current || peer.signalingState !== 'stable';
-                            
+
                             if (offerCollision) {
                                 // We're the impolite peer if we have higher socket ID
-                                const isPolite = socket.id < data.from;
+                                const isPolite = (socket.id || '') < data.from;
                                 if (!isPolite) {
                                     // Ignore the offer, we'll keep our own
                                     return;
@@ -110,9 +133,9 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                 // We're polite, rollback our offer
                                 await peer.setLocalDescription({ type: 'rollback' });
                             }
-                            
+
                             await peer.setRemoteDescription(new RTCSessionDescription(signal));
-                            
+
                             // Process any queued ICE candidates
                             while (pendingCandidatesRef.current.length > 0) {
                                 const candidate = pendingCandidatesRef.current.shift();
@@ -120,16 +143,16 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                     await peer.addIceCandidate(candidate).catch(e => console.warn('Error adding queued candidate:', e));
                                 }
                             }
-                            
+
                             const answer = await peer.createAnswer();
                             await peer.setLocalDescription(answer);
                             socket.emit('signal', { to: roomId, signal: answer });
-                            
+
                         } else if (signal.type === 'answer') {
                             // Only set answer if we're expecting one
                             if (peer.signalingState === 'have-local-offer') {
                                 await peer.setRemoteDescription(new RTCSessionDescription(signal));
-                                
+
                                 // Process any queued ICE candidates
                                 while (pendingCandidatesRef.current.length > 0) {
                                     const candidate = pendingCandidatesRef.current.shift();
@@ -138,7 +161,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                     }
                                 }
                             }
-                            
+
                         } else if (signal.type === 'candidate' && signal.candidate) {
                             // Queue candidates if remote description not set yet
                             if (!peer.remoteDescription || !peer.remoteDescription.type) {
@@ -152,28 +175,16 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     }
                 });
 
-                // Start Call Logic (Initiator creates offer)
-                // We need a way to know who is initiator. 
-                // For simplicity, let's say the one who joined first (or alphabetically) offers?
-                // Actually, 'conversation_start' event tells us who starts speaking, but signaling needs to happen before or during.
-                // Let's make both ready, then one offers.
-                // Better: Just have both emit 'ready_to_start' and let server decide.
-                // But for WebRTC, one must offer.
-                // Let's use the 'match_found' (which we missed handling in this component, it happened in Lobby)
-                // to trigger negotiation.
-                // We'll rely on a "polite peer" or just have the one with lower ID offer.
-                // For now, let's wait for 'conversation_start' to ensure we are connected? No, need audio first.
-
-                // Let's just say: If I am the one who created the room (or some deterministic check), I offer.
-                // Or simpler: Just have a "negotiate" event.
-
-                // Let's assume the server sends 'partner_info' to both.
-                // We can use that.
-
-                socket.emit('ready_to_start', roomId);
+                // Initiate negotiation immediately to establish connection BEFORE starting game
+                makingOfferRef.current = true;
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                socket.emit('signal', { to: roomId, signal: offer });
+                makingOfferRef.current = false;
 
             } catch (err) {
                 console.error('Error initializing:', err);
+                setConnectionStatus('error');
             }
         };
 
@@ -181,6 +192,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
 
         // Game Logic Listeners
         socket.on('conversation_start', async ({ firstSpeaker, startTime }) => {
+            console.log('Conversation starting! Audio should be ready.');
             conversationStartTime.current = Date.now();
             const iAmFirst = firstSpeaker === socket.id;
             isUserSpeakerA.current = iAmFirst; // First speaker is A
@@ -192,22 +204,8 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             setSpeakerOrder([iAmFirst ? 'A' : 'B']); // First turn
 
             if (iAmFirst) {
-                startRecording();
                 unmuteMic();
-
-                // Initiate WebRTC Call
-                try {
-                    if (peerRef.current) {
-                        makingOfferRef.current = true;
-                        const offer = await peerRef.current.createOffer();
-                        await peerRef.current.setLocalDescription(offer);
-                        socket.emit('signal', { to: roomId, signal: offer });
-                        makingOfferRef.current = false;
-                    }
-                } catch (err) {
-                    console.error('Error creating offer:', err);
-                    makingOfferRef.current = false;
-                }
+                startRecording();
             } else {
                 muteMic();
                 // Start recording partner's audio
@@ -227,19 +225,19 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             if (iAmSpeaking) {
                 // Stop recording partner's audio and save to history
                 stopRemoteRecording();
-                
+
                 setStatus('my_turn');
-                startRecording();
                 unmuteMic();
+                startRecording();
                 currentTurnRef.current = turn || currentTurnRef.current + 1;
             } else {
                 // Stop my recording and save to history
                 stopRecording();
-                
+
                 setStatus('their_turn');
                 muteMic();
                 currentTurnRef.current = turn || currentTurnRef.current + 1;
-                
+
                 // Start recording partner's audio
                 startRemoteRecording();
             }
@@ -249,7 +247,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             // Stop both local and remote recorders
             stopRecording();
             stopRemoteRecording();
-            
+
             // Wait a bit for the last recordings to be processed
             setTimeout(() => {
                 cleanup();
@@ -349,7 +347,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                 if (blob.size > 0) {
                     recordingsRef.current = [...recordingsRef.current, blob];
                     setRecordings(prev => [...prev, blob]);
-                    
+
                     // Add to conversation history
                     const url = URL.createObjectURL(blob);
                     const historyEntry: TurnRecording = {
@@ -384,6 +382,12 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             return;
         }
 
+        // Check if stream is active and has tracks
+        if (!remoteStreamRef.current.active || remoteStreamRef.current.getAudioTracks().length === 0) {
+            console.warn('Remote stream is inactive or has no audio tracks!');
+            return;
+        }
+
         // Ensure previous recorder is stopped
         if (remoteRecorderRef.current && remoteRecorderRef.current.state !== 'inactive') {
             remoteRecorderRef.current.stop();
@@ -414,7 +418,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     // Add to recordings for saving (same as local recordings)
                     recordingsRef.current = [...recordingsRef.current, blob];
                     setRecordings(prev => [...prev, blob]);
-                    
+
                     // Add to conversation history for playback
                     const url = URL.createObjectURL(blob);
                     const historyEntry: TurnRecording = {
@@ -452,7 +456,7 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             // Stop any currently playing audio
             historyAudioRef.current.pause();
             historyAudioRef.current.currentTime = 0;
-            
+
             historyAudioRef.current.src = conversationHistory[index].url;
             historyAudioRef.current.play()
                 .then(() => setPlayingIndex(index))
@@ -567,7 +571,20 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     )}
 
                     {status === 'waiting' && (
-                        <div className="text-slate-500">Connecting to partner...</div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-slate-400">Establishing Audio Connection...</div>
+                            <div className={`text-xs px-2 py-1 rounded ${connectionStatus === 'connected' || connectionStatus === 'completed'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : 'bg-slate-700 text-slate-400'
+                                }`}>
+                                Status: {connectionStatus}
+                            </div>
+                        </div>
+                    )}
+
+                    {status === 'connecting' && (
+                        <div className="text-slate-500">Initializing...</div>
                     )}
                 </div>
 
@@ -598,18 +615,17 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                 </div>
                             )}
                         </div>
-                        
+
                         {showHistory && (
                             <div className="bg-slate-900/50 rounded-xl border border-slate-700 p-4 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600">
                                 <div className="space-y-2">
                                     {conversationHistory.map((turn, index) => (
                                         <div
                                             key={`${turn.turnNumber}-${turn.speaker}-${index}`}
-                                            className={`flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer ${
-                                                playingIndex === index
-                                                    ? 'bg-blue-500/20 border border-blue-500/50 shadow-lg shadow-blue-500/10'
-                                                    : 'bg-slate-800/50 hover:bg-slate-800 border border-transparent'
-                                            }`}
+                                            className={`flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer ${playingIndex === index
+                                                ? 'bg-blue-500/20 border border-blue-500/50 shadow-lg shadow-blue-500/10'
+                                                : 'bg-slate-800/50 hover:bg-slate-800 border border-transparent'
+                                                }`}
                                             onClick={() => {
                                                 if (playingIndex === index) {
                                                     stopHistoryPlayback();
@@ -620,35 +636,32 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                                             }}
                                         >
                                             {/* Speaker Avatar */}
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                                                turn.speaker === 'me' ? 'bg-blue-500' : 'bg-emerald-500'
-                                            }`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${turn.speaker === 'me' ? 'bg-blue-500' : 'bg-emerald-500'
+                                                }`}>
                                                 {turn.speakerName[0]}
                                             </div>
-                                            
+
                                             {/* Turn Info */}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span className="text-xs font-medium text-slate-300">
                                                         Turn {turn.turnNumber}
                                                     </span>
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                                        turn.speaker === 'me' 
-                                                            ? 'bg-blue-500/20 text-blue-400' 
-                                                            : 'bg-emerald-500/20 text-emerald-400'
-                                                    }`}>
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${turn.speaker === 'me'
+                                                        ? 'bg-blue-500/20 text-blue-400'
+                                                        : 'bg-emerald-500/20 text-emerald-400'
+                                                        }`}>
                                                         {turn.speaker === 'me' ? 'You' : turn.speakerName}
                                                     </span>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Play/Pause Button */}
                                             <button
-                                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
-                                                    playingIndex === index
-                                                        ? 'bg-blue-500 text-white animate-pulse'
-                                                        : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
-                                                }`}
+                                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${playingIndex === index
+                                                    ? 'bg-blue-500 text-white animate-pulse'
+                                                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
+                                                    }`}
                                             >
                                                 {playingIndex === index ? '⏸' : '▶'}
                                             </button>

@@ -141,39 +141,55 @@ function setupSocketIO(io) {
         });
 
         // Turn Management
+
+        const roomReadiness = new Map(); // roomId -> Set(socketId)
+
         socket.on('ready_to_start', (roomId) => {
             const room = io.sockets.adapter.rooms.get(roomId);
             if (room && room.size === 2) {
-                // Initialize conversation data
-                conversationData.set(roomId, {
-                    turnCount: 0,
-                    startTime: Date.now(),
-                    totalDuration: 10 * 60 * 1000, // 10 minutes
-                    maxTurns: 20
-                });
+                // Track readiness
+                if (!roomReadiness.has(roomId)) {
+                    roomReadiness.set(roomId, new Set());
+                }
+                roomReadiness.get(roomId).add(socket.id);
 
-                // Start the conversation
-                // Decide who goes first randomly
-                const clients = Array.from(room);
-                const firstSpeaker = clients[Math.floor(Math.random() * clients.length)];
+                // Only start if both are ready
+                if (roomReadiness.get(roomId).size === 2) {
+                    // Initialize conversation data
+                    conversationData.set(roomId, {
+                        turnCount: 0,
+                        startTime: Date.now(),
+                        totalDuration: 10 * 60 * 1000, // 10 minutes
+                        maxTurns: 20
+                    });
 
-                io.to(roomId).emit('conversation_start', {
-                    firstSpeaker,
-                    startTime: Date.now()
-                });
+                    // Start the conversation
+                    // Decide who goes first randomly
+                    const clients = Array.from(room);
+                    const firstSpeaker = clients[Math.floor(Math.random() * clients.length)];
 
-                // Start turn timer
-                startTurnTimer(io, roomId, firstSpeaker);
+                    io.to(roomId).emit('conversation_start', {
+                        firstSpeaker,
+                        startTime: Date.now()
+                    });
 
-                // Start total conversation timer (10 minutes)
-                setTimeout(() => {
-                    if (conversationData.has(roomId)) {
-                        io.to(roomId).emit('conversation_ended', { reason: 'time_limit' });
-                        cleanupRoom(roomId);
-                    }
-                }, 10 * 60 * 1000);
+                    // Start turn timer
+                    startTurnTimer(io, roomId, firstSpeaker);
+
+                    // Start total conversation timer (10 minutes)
+                    setTimeout(() => {
+                        if (conversationData.has(roomId)) {
+                            io.to(roomId).emit('conversation_ended', { reason: 'time_limit' });
+                            cleanupRoom(roomId);
+                        }
+                    }, 10 * 60 * 1000);
+
+                    // Cleanup readiness map
+                    roomReadiness.delete(roomId);
+                }
             }
         });
+
 
         socket.on('end_conversation', (roomId) => {
             io.to(roomId).emit('conversation_ended');

@@ -137,8 +137,13 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                                 className="bg-slate-700 p-4 rounded-lg border border-slate-600 hover:border-blue-500 transition-colors"
                             >
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="font-medium text-sm">
+                                    <span className="font-medium text-sm flex items-center gap-2">
                                         {getSpeakerLabel(index)}
+                                        {blob.size === 0 && (
+                                            <span className="text-xs text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20" title="Empty recording">
+                                                ⚠️ Silent
+                                            </span>
+                                        )}
                                     </span>
                                     <button
                                         onClick={() => handlePlayTurn(index)}
