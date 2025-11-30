@@ -3,10 +3,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import ffmpeg from 'fluent-ffmpeg';
 import { Readable } from 'stream';
+import { STORAGE_CONFIG } from '@/app/lib/storage-config';
 
-// Ensure data directory exists
-const DATA_DIR = path.join(process.cwd(), 'data', 'recordings', 'spa');
-const AUDIO_DIR = path.join(DATA_DIR, 'audio');
+const { AUDIO_DIR } = STORAGE_CONFIG;
 
 async function ensureDirectories() {
     await fs.mkdir(AUDIO_DIR, { recursive: true });

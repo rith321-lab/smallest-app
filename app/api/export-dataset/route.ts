@@ -4,10 +4,9 @@ import path from 'path';
 import { createObjectCsvWriter } from 'csv-writer';
 import archiver from 'archiver';
 import { Readable } from 'stream';
+import { STORAGE_CONFIG } from '@/app/lib/storage-config';
 
-const DATA_DIR = path.join(process.cwd(), 'data', 'recordings', 'spa');
-const AUDIO_DIR = path.join(DATA_DIR, 'audio');
-const TRANSCRIPT_DIR = path.join(DATA_DIR, 'transcripts');
+const { DATA_DIR, AUDIO_DIR, TRANSCRIPT_DIR } = STORAGE_CONFIG;
 
 interface RecordingMetadata {
     file_name: string;
