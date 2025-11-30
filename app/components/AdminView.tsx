@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Recording {
     filename: string;
@@ -34,6 +34,12 @@ export default function AdminView({ onBack }: AdminViewProps) {
     const [saving, setSaving] = useState(false);
     const [filter, setFilter] = useState<'all' | 'pending' | 'complete'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
+    const [transcriptContent, setTranscriptContent] = useState<string>('');
+    const [transcriptLoading, setTranscriptLoading] = useState(false);
+    const [transcriptSaving, setTranscriptSaving] = useState(false);
+    const [modalEditForm, setModalEditForm] = useState({ speakerId: '', sampleId: '' });
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     const fetchRecordings = async () => {
         try {
@@ -159,6 +165,94 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
     const handleDownloadTranscript = (filename: string) => {
         window.location.href = `/api/download-recording?filename=${encodeURIComponent(filename)}&type=transcript`;
+    };
+
+    const handleOpenRecordingDetails = async (rec: Recording) => {
+        setSelectedRecording(rec);
+        setModalEditForm({ speakerId: rec.speakerId, sampleId: rec.sampleId });
+        setTranscriptContent('');
+        setTranscriptLoading(true);
+
+        try {
+            const res = await fetch(`/api/get-transcript?filename=${encodeURIComponent(rec.filename)}`);
+            const data = await res.json();
+            if (data.success && data.content) {
+                setTranscriptContent(data.content);
+            }
+        } catch (error) {
+            console.error('Failed to fetch transcript:', error);
+        } finally {
+            setTranscriptLoading(false);
+        }
+    };
+
+    const handleCloseModal = () => {
+        setSelectedRecording(null);
+        setTranscriptContent('');
+        setModalEditForm({ speakerId: '', sampleId: '' });
+        if (audioRef.current) {
+            audioRef.current.pause();
+        }
+    };
+
+    const handleSaveTranscript = async () => {
+        if (!selectedRecording) return;
+
+        setTranscriptSaving(true);
+        try {
+            const res = await fetch('/api/update-transcript', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: selectedRecording.filename,
+                    content: transcriptContent
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                await fetchRecordings();
+                alert('Transcript saved successfully!');
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Save transcript error:', error);
+            alert('Failed to save transcript');
+        } finally {
+            setTranscriptSaving(false);
+        }
+    };
+
+    const handleSaveModalEdit = async () => {
+        if (!selectedRecording) return;
+
+        setSaving(true);
+        try {
+            const res = await fetch('/api/update-recording', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    originalFilename: selectedRecording.filename,
+                    newSpeakerId: modalEditForm.speakerId,
+                    newSampleId: modalEditForm.sampleId
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                await fetchRecordings();
+                handleCloseModal();
+                alert('Recording updated successfully!');
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Update error:', error);
+            alert('Failed to update recording');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -310,8 +404,13 @@ export default function AdminView({ onBack }: AdminViewProps) {
                                         const isEditing = editingFilename === rec.filename;
                                         return (
                                             <tr key={rec.filename} className="hover:bg-slate-700/30 transition-colors">
-                                                <td className="p-4 font-mono text-sm text-blue-300">
-                                                    {rec.filename}
+                                                <td className="p-4 font-mono text-sm">
+                                                    <button
+                                                        onClick={() => handleOpenRecordingDetails(rec)}
+                                                        className="text-blue-300 hover:text-blue-200 hover:underline cursor-pointer text-left"
+                                                    >
+                                                        {rec.filename}
+                                                    </button>
                                                 </td>
                                                 <td className="p-4">
                                                     {isEditing ? (
@@ -435,6 +534,128 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     </div>
                 </div>
             </div>
+
+            {/* Recording Details Modal */}
+            {selectedRecording && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-800">
+                            <h2 className="text-xl font-bold text-white">Recording Details</h2>
+                            <button
+                                onClick={handleCloseModal}
+                                className="text-slate-400 hover:text-white text-2xl"
+                            >
+                                &times;
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Filename */}
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-400 mb-2">Filename</h3>
+                                <p className="font-mono text-blue-300">{selectedRecording.filename}</p>
+                            </div>
+
+                            {/* Audio Player */}
+                            {selectedRecording.hasAudio && (
+                                <div>
+                                    <h3 className="text-sm font-medium text-slate-400 mb-2">Audio Playback</h3>
+                                    <audio
+                                        ref={audioRef}
+                                        controls
+                                        className="w-full"
+                                        src={`/api/download-recording?filename=${encodeURIComponent(selectedRecording.filename)}&type=audio`}
+                                    >
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                </div>
+                            )}
+
+                            {/* Edit Speaker ID and Sample ID */}
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-400 mb-2">Edit Recording Info</h3>
+                                <div className="flex gap-4 items-end">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Speaker ID</label>
+                                        <input
+                                            type="text"
+                                            value={modalEditForm.speakerId}
+                                            onChange={(e) => setModalEditForm({ ...modalEditForm, speakerId: e.target.value })}
+                                            className="w-24 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                            placeholder="0000"
+                                            maxLength={4}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Sample ID</label>
+                                        <input
+                                            type="text"
+                                            value={modalEditForm.sampleId}
+                                            onChange={(e) => setModalEditForm({ ...modalEditForm, sampleId: e.target.value })}
+                                            className="w-20 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                            placeholder="001"
+                                            maxLength={3}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleSaveModalEdit}
+                                        disabled={saving}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        {saving ? 'Saving...' : 'Update Info'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Transcript Editor */}
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-400 mb-2">Transcript</h3>
+                                {transcriptLoading ? (
+                                    <div className="text-slate-500 py-4">Loading transcript...</div>
+                                ) : (
+                                    <>
+                                        <textarea
+                                            value={transcriptContent}
+                                            onChange={(e) => setTranscriptContent(e.target.value)}
+                                            className="w-full h-48 px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500 resize-y"
+                                            placeholder="No transcript available. Enter transcript text here..."
+                                        />
+                                        <div className="flex justify-end mt-2">
+                                            <button
+                                                onClick={handleSaveTranscript}
+                                                disabled={transcriptSaving}
+                                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+                                            >
+                                                {transcriptSaving ? 'Saving...' : 'Save Transcript'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Download Buttons */}
+                            <div className="flex gap-4 pt-4 border-t border-slate-700">
+                                {selectedRecording.hasAudio && (
+                                    <button
+                                        onClick={() => handleDownloadAudio(selectedRecording.filename)}
+                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                        <span>🎵</span> Download Audio
+                                    </button>
+                                )}
+                                {selectedRecording.hasTranscript && (
+                                    <button
+                                        onClick={() => handleDownloadTranscript(selectedRecording.filename)}
+                                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                        <span>📝</span> Download Transcript
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
