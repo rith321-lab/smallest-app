@@ -80,7 +80,7 @@ describe('Login Component', () => {
     it('calls onAdmin when admin link is clicked', () => {
         render(<Login onJoin={mockOnJoin} onAdmin={mockOnAdmin} />)
 
-        fireEvent.click(screen.getByText('View Dataset Tracker'))
+        fireEvent.click(screen.getByText('Recordings Dashboard'))
         expect(mockOnAdmin).toHaveBeenCalled()
     })
 })

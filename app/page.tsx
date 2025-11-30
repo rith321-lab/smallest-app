@@ -124,6 +124,7 @@ export default function Home() {
           userData={userData}
           partnerData={partnerData}
           onEnd={handleConversationEnd}
+          onAdmin={() => setView('admin')}
         />
       )}
 
@@ -132,6 +133,7 @@ export default function Home() {
           recordings={recordings}
           metadata={conversationMetadata}
           onComplete={handleAnnotationComplete}
+          onAdmin={() => setView('admin')}
         />
       )}
 

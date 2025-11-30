@@ -7,6 +7,7 @@ interface AnnotationViewProps {
     recordings: Blob[];
     metadata?: any;
     onComplete: () => void;
+    onAdmin: () => void;
 }
 
 const TURN_DURATION_SECONDS = 30;
@@ -23,7 +24,7 @@ const getTurnTimeRange = (index: number) => {
     return `${formatTime(startSec)}-${formatTime(endSec)}`;
 };
 
-export default function AnnotationView({ recordings, metadata, onComplete }: AnnotationViewProps) {
+export default function AnnotationView({ recordings, metadata, onComplete, onAdmin }: AnnotationViewProps) {
     const [transcript, setTranscript] = useState('');
     const [saving, setSaving] = useState(false);
     const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number | null>(null);
@@ -285,12 +286,24 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
             <div className="w-full max-w-6xl bg-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-700 my-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
-                        Annotate Conversation
-                    </h1>
-                    <p className="text-slate-400 mt-2">
-                        Review all {recordings.length} turns and add a combined transcript
-                    </p>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                                Annotate Conversation
+                            </h1>
+                            <p className="text-slate-400 mt-2">
+                                Review all {recordings.length} turns and add a combined transcript
+                            </p>
+                        </div>
+                        <button
+                            onClick={onAdmin}
+                            className="text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-slate-300 transition-colors flex items-center gap-2"
+                            title="Recordings Dashboard"
+                        >
+                            <span>📊</span>
+                            <span className="font-medium">Recordings Dashboard</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Playback Error Display */}

@@ -207,7 +207,7 @@ export default function Login({ onJoin, onAdmin }: LoginProps) {
                         onClick={onAdmin}
                         className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
                     >
-                        View Dataset Tracker
+                        Recordings Dashboard
                     </button>
                 </div>
             </div>
