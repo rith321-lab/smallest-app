@@ -71,7 +71,9 @@ describe('Login Component', () => {
             nationality: 'Spain',
             age: 30,
             gender: 'Female',
-            interests: ['Technology']
+            interests: ['Technology'],
+            dialect: 'Castilian',
+            recordingDevice: 'iPhone'
         })
     })
 

@@ -40,7 +40,7 @@ interface TurnRecording {
 interface ConversationRoomProps {
     socket: Socket;
     roomId: string;
-    userData: { name: string; nationality: string };
+    userData: { name: string; nationality: string; age?: number; gender?: string; dialect?: string; recordingDevice?: string };
     partnerData: { name: string; nationality: string };
     onEnd: (recordings: Blob[], metadata: any) => void;
 }
@@ -334,6 +334,11 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                     userIsSpeakerA: isUserSpeakerA.current,
                     userName: userData.name,
                     partnerName: partnerData.name,
+                    userAge: userData.age,
+                    userGender: userData.gender,
+                    userDialect: userData.dialect,
+                    userRecordingDevice: userData.recordingDevice,
+                    userNationality: userData.nationality,
                     totalTurns: speakerOrder.length,
                     endReason: data?.reason || 'manual',
                     silentRecordings: silentCount,

@@ -27,6 +27,13 @@ export async function POST(request: NextRequest) {
         const userIsSpeakerA = formData.get('userIsSpeakerA') === 'true';
         const turnCount = parseInt(formData.get('turnCount') as string || '0');
         const transcript = formData.get('transcript') as string || '';
+        
+        // Extract new TTS metadata fields
+        const userAge = formData.get('userAge') as string || '';
+        const userGender = formData.get('userGender') as string || '';
+        const userDialect = formData.get('userDialect') as string || '';
+        const userRecordingDevice = formData.get('userRecordingDevice') as string || '';
+        const userNationality = formData.get('userNationality') as string || '';
 
         if (turnCount === 0) {
             return NextResponse.json(
@@ -76,6 +83,7 @@ export async function POST(request: NextRequest) {
 
             // Save metadata JSON
             const metadataPath = path.join(DATA_DIR, `spa_${conversationId}_metadata.json`);
+            const durationSec = turnCount * 30; // Each turn is 30 seconds
             const metadata = {
                 conversationId,
                 speakerOrder,
@@ -85,9 +93,31 @@ export async function POST(request: NextRequest) {
                 },
                 turnCount,
                 recordedAt: new Date().toISOString(),
-                transcript
+                transcript,
+                // TTS metadata fields
+                age: userAge,
+                gender: userGender,
+                dialect: userDialect,
+                recordingDevice: userRecordingDevice,
+                nationality: userNationality,
+                language: 'Spanish',
+                durationSec
             };
             await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+
+            // Update metadata.csv with new entry
+            const csvPath = path.join(DATA_DIR, 'metadata.csv');
+            const csvHeader = 'file_name,speaker_id,age,gender,language,dialect,duration_sec,recording_device,notes\n';
+            const csvRow = `spa_${conversationId}.wav,${conversationId},${userAge},${userGender},Spanish,${userDialect},${durationSec},${userRecordingDevice},"${userName} conversation"\n`;
+            
+            try {
+                await fs.access(csvPath);
+                // File exists, append row
+                await fs.appendFile(csvPath, csvRow);
+            } catch {
+                // File doesn't exist, create with header
+                await fs.writeFile(csvPath, csvHeader + csvRow);
+            }
 
             // Cleanup temp files
             await Promise.all([
