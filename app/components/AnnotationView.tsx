@@ -8,11 +8,28 @@ interface AnnotationViewProps {
     onComplete: () => void;
 }
 
+const TURN_DURATION_SECONDS = 30;
+
+const formatTime = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+const getTurnTimeRange = (index: number) => {
+    const startSec = index * TURN_DURATION_SECONDS;
+    const endSec = (index + 1) * TURN_DURATION_SECONDS;
+    return `${formatTime(startSec)}-${formatTime(endSec)}`;
+};
+
 export default function AnnotationView({ recordings, metadata, onComplete }: AnnotationViewProps) {
     const [transcript, setTranscript] = useState('');
     const [saving, setSaving] = useState(false);
     const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number | null>(null);
     const [playbackError, setPlaybackError] = useState<string | null>(null);
+    const [autoTranscribing, setAutoTranscribing] = useState(false);
+    const [autoTranscribeError, setAutoTranscribeError] = useState<string | null>(null);
+    const [autoTranscribeProgress, setAutoTranscribeProgress] = useState<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
 
@@ -33,16 +50,82 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
         };
     }, [audioUrls]);
 
-    // Get speaker labels from metadata
+    // Get speaker labels from metadata with timing info
     const getSpeakerLabel = (index: number) => {
+        const timeRange = getTurnTimeRange(index);
         if (!metadata?.speakerOrder || !metadata.speakerOrder[index]) {
-            return `Turn ${index + 1}`;
+            return `Turn ${index + 1} (${timeRange})`;
         }
         const speaker = metadata.speakerOrder[index];
         const speakerName = speaker === 'A'
             ? (metadata.userIsSpeakerA ? metadata.userName : metadata.partnerName)
             : (metadata.userIsSpeakerA ? metadata.partnerName : metadata.userName);
-        return `Turn ${index + 1} - Speaker ${speaker} (${speakerName})`;
+        return `Turn ${index + 1} - Speaker ${speaker} (${speakerName}) [${timeRange}]`;
+    };
+
+    // Build formatted transcript with labels and timing
+    const buildFormattedTranscript = (texts: string[]) => {
+        const lines: string[] = [];
+        for (let i = 0; i < texts.length; i++) {
+            const label = getSpeakerLabel(i);
+            const text = texts[i] || '[No audio captured]';
+            lines.push(`[${label}]\n${text}\n`);
+        }
+        return lines.join('\n');
+    };
+
+    // Auto-transcribe all turns using OpenAI Whisper
+    const handleAutoTranscribe = async () => {
+        setAutoTranscribing(true);
+        setAutoTranscribeError(null);
+        setAutoTranscribeProgress(null);
+
+        try {
+            const results: string[] = [];
+
+            for (let i = 0; i < recordings.length; i++) {
+                const blob = recordings[i];
+
+                // Skip empty/silent recordings
+                if (blob.size === 0) {
+                    results.push('[No audio captured]');
+                    continue;
+                }
+
+                setAutoTranscribeProgress(`Transcribing turn ${i + 1} of ${recordings.length}...`);
+
+                const formData = new FormData();
+                const file = new File(
+                    [blob],
+                    `turn_${i + 1}.webm`,
+                    { type: blob.type || 'audio/webm' }
+                );
+                formData.append('audio', file);
+
+                const res = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || `Failed to transcribe turn ${i + 1}`);
+                }
+
+                const data = await res.json();
+                results.push(typeof data.text === 'string' ? data.text : String(data.text));
+            }
+
+            // Build formatted transcript with labels and timing
+            const formatted = buildFormattedTranscript(results);
+            setTranscript(formatted);
+        } catch (e: any) {
+            console.error('Auto-transcribe error:', e);
+            setAutoTranscribeError(e.message || 'Auto-transcription failed. Please try again.');
+        } finally {
+            setAutoTranscribing(false);
+            setAutoTranscribeProgress(null);
+        }
     };
 
     const insertTag = (tag: string) => {
@@ -255,7 +338,21 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                 <div className="mb-6">
                     <div className="flex justify-between items-center mb-2">
                         <label className="block text-sm font-medium">Full Conversation Transcript</label>
+                        <button
+                            onClick={handleAutoTranscribe}
+                            disabled={autoTranscribing || recordings.length === 0}
+                            className="px-4 py-2 text-sm rounded bg-purple-600 hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {autoTranscribing
+                                ? (autoTranscribeProgress || 'Transcribing...')
+                                : 'Auto-transcribe all turns'}
+                        </button>
                     </div>
+                    {autoTranscribeError && (
+                        <div className="mb-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                            {autoTranscribeError}
+                        </div>
+                    )}
                     <textarea
                         ref={textareaRef}
                         value={transcript}
