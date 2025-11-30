@@ -16,6 +16,8 @@ interface Stats {
     totalFiles: number;
     totalSize: number;
     totalTranscribed: number;
+    totalDurationHours?: number;
+    uniqueSpeakers?: number;
 }
 
 interface AdminViewProps {
@@ -30,6 +32,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
     const [editingFilename, setEditingFilename] = useState<string | null>(null);
     const [editForm, setEditForm] = useState({ speakerId: '', sampleId: '' });
     const [saving, setSaving] = useState(false);
+    const [filter, setFilter] = useState<'all' | 'pending' | 'complete'>('all');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchRecordings = async () => {
         try {
@@ -54,6 +58,21 @@ export default function AdminView({ onBack }: AdminViewProps) {
         return () => clearInterval(interval);
     }, []);
 
+    // Filter recordings based on filter and search query
+    const filteredRecordings = recordings.filter(rec => {
+        // Apply status filter
+        if (filter === 'pending' && rec.hasTranscript) return false;
+        if (filter === 'complete' && !rec.hasTranscript) return false;
+        
+        // Apply search filter
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            return rec.filename.toLowerCase().includes(query) ||
+                   rec.speakerId.toLowerCase().includes(query);
+        }
+        return true;
+    });
+
     const formatBytes = (bytes: number) => {
         if (bytes === 0) return '0 B';
         const k = 1024;
@@ -61,6 +80,12 @@ export default function AdminView({ onBack }: AdminViewProps) {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
+
+    // Calculate estimated hours (assuming 30 seconds per recording)
+    const estimatedHours = stats ? (stats.totalFiles * 30 / 3600).toFixed(1) : '0';
+    
+    // Calculate unique speakers
+    const uniqueSpeakers = new Set(recordings.map(r => r.speakerId)).size;
 
     const handleExport = () => {
         window.location.href = '/api/export-dataset';
@@ -159,25 +184,82 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
                 {/* Stats Cards */}
                 {stats && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                            <h3 className="text-slate-400 text-sm font-medium uppercase">Total Recordings</h3>
-                            <p className="text-3xl font-bold mt-2">{stats.totalFiles}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-slate-400 text-xs font-medium uppercase">Total Recordings</h3>
+                            <p className="text-2xl font-bold mt-1">{stats.totalFiles}</p>
                         </div>
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                            <h3 className="text-slate-400 text-sm font-medium uppercase">Total Size</h3>
-                            <p className="text-3xl font-bold mt-2">{formatBytes(stats.totalSize)}</p>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-slate-400 text-xs font-medium uppercase">Est. Hours</h3>
+                            <p className="text-2xl font-bold mt-1">{estimatedHours}h</p>
+                            <p className="text-xs text-slate-500">of 5000h goal</p>
                         </div>
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                            <h3 className="text-slate-400 text-sm font-medium uppercase">Completion Rate</h3>
-                            <p className="text-3xl font-bold mt-2 text-emerald-400">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-slate-400 text-xs font-medium uppercase">Unique Speakers</h3>
+                            <p className="text-2xl font-bold mt-1">{uniqueSpeakers}</p>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-slate-400 text-xs font-medium uppercase">Total Size</h3>
+                            <p className="text-2xl font-bold mt-1">{formatBytes(stats.totalSize)}</p>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-slate-400 text-xs font-medium uppercase">Transcribed</h3>
+                            <p className="text-2xl font-bold mt-1 text-emerald-400">
                                 {stats.totalFiles > 0
                                     ? Math.round((stats.totalTranscribed / stats.totalFiles) * 100)
                                     : 0}%
                             </p>
+                            <p className="text-xs text-slate-500">{stats.totalTranscribed} / {stats.totalFiles}</p>
                         </div>
                     </div>
                 )}
+
+                {/* Progress Bar */}
+                {stats && stats.totalFiles > 0 && (
+                    <div className="mb-8">
+                        <div className="flex justify-between text-sm mb-2">
+                            <span className="text-slate-400">Dataset Progress</span>
+                            <span className="text-emerald-400">{estimatedHours}h / 5000h ({((parseFloat(estimatedHours) / 5000) * 100).toFixed(2)}%)</span>
+                        </div>
+                        <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+                                style={{ width: `${Math.min((parseFloat(estimatedHours) / 5000) * 100, 100)}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Filter Controls */}
+                <div className="flex flex-wrap gap-4 mb-6">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setFilter('all')}
+                            className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                        >
+                            All ({recordings.length})
+                        </button>
+                        <button
+                            onClick={() => setFilter('pending')}
+                            className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === 'pending' ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                        >
+                            Pending ({recordings.filter(r => !r.hasTranscript).length})
+                        </button>
+                        <button
+                            onClick={() => setFilter('complete')}
+                            className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === 'complete' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                        >
+                            Complete ({recordings.filter(r => r.hasTranscript).length})
+                        </button>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search by filename or speaker ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="flex-1 min-w-[200px] px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                    />
+                </div>
 
                 {/* Recordings Table */}
                 <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -209,14 +291,14 @@ export default function AdminView({ onBack }: AdminViewProps) {
                                             Loading recordings...
                                         </td>
                                     </tr>
-                                ) : recordings.length === 0 ? (
+                                ) : filteredRecordings.length === 0 ? (
                                     <tr>
                                         <td colSpan={8} className="p-8 text-center text-slate-500">
-                                            No recordings found yet. Start a conversation!
+                                            {recordings.length === 0 ? 'No recordings found yet. Start a conversation!' : 'No recordings match your filter.'}
                                         </td>
                                     </tr>
                                 ) : (
-                                    recordings.map((rec) => {
+                                    filteredRecordings.map((rec) => {
                                         const isEditing = editingFilename === rec.filename;
                                         return (
                                             <tr key={rec.filename} className="hover:bg-slate-700/30 transition-colors">

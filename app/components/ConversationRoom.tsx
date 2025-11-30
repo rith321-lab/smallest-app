@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
+import LiveCaptions from './LiveCaptions';
 
 // Helper function to get a supported audio MIME type for MediaRecorder
 // Safari doesn't support WebM, so we need to fall back to mp4
@@ -705,6 +706,18 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                         </div>
                     )}
                 </div>
+
+                {/* Live Captions */}
+                {(status === 'my_turn' || status === 'their_turn') && (
+                    <div className="mb-6">
+                        <LiveCaptions
+                            isActive={status === 'my_turn' || status === 'their_turn'}
+                            isSpeaking={status === 'my_turn'}
+                            speakerName={status === 'my_turn' ? userData.name : partnerData.name}
+                            language="es-ES"
+                        />
+                    </div>
+                )}
 
                 {/* Conversation History Panel */}
                 {conversationHistory.length > 0 && (
