@@ -6,6 +6,7 @@ const queue = []; // Array of socket.id
 const privateRooms = new Map(); // roomCode -> roomId
 const conversationData = new Map(); // roomId -> { turnCount, startTime, totalDuration }
 const roomTimers = {};
+const roomReadiness = new Map(); // roomId -> Set(socketId) - tracks which users are ready to start
 
 function setupSocketIO(io) {
     io.on('connection', (socket) => {
@@ -141,10 +142,8 @@ function setupSocketIO(io) {
         });
 
         // Turn Management
-
-        const roomReadiness = new Map(); // roomId -> Set(socketId)
-
         socket.on('ready_to_start', (roomId) => {
+            console.log('[ready_to_start]', { roomId, socketId: socket.id });
             const room = io.sockets.adapter.rooms.get(roomId);
             if (room && room.size === 2) {
                 // Track readiness
@@ -155,6 +154,8 @@ function setupSocketIO(io) {
 
                 // Only start if both are ready
                 if (roomReadiness.get(roomId).size === 2) {
+                    console.log('[conversation_start] Both users ready, starting conversation in room:', roomId);
+                    
                     // Initialize conversation data
                     conversationData.set(roomId, {
                         turnCount: 0,
@@ -167,6 +168,7 @@ function setupSocketIO(io) {
                     // Decide who goes first randomly
                     const clients = Array.from(room);
                     const firstSpeaker = clients[Math.floor(Math.random() * clients.length)];
+                    console.log('[conversation_start] First speaker:', firstSpeaker);
 
                     io.to(roomId).emit('conversation_start', {
                         firstSpeaker,
