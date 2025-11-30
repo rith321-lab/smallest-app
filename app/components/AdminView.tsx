@@ -6,6 +6,8 @@ interface Recording {
     filename: string;
     speakerId: string;
     sampleId: string;
+    participants?: string;
+    summary?: string;
     size: number;
     createdAt: string;
     hasAudio: boolean;
@@ -377,8 +379,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                             <thead className="bg-slate-900/50 text-slate-400 text-sm">
                                 <tr>
                                     <th className="p-4">Filename</th>
-                                    <th className="p-4">Speaker ID</th>
-                                    <th className="p-4">Sample ID</th>
+                                    <th className="p-4">Participants</th>
+                                    <th className="p-4">Summary</th>
                                     <th className="p-4">Size</th>
                                     <th className="p-4 text-center">Audio (WAV)</th>
                                     <th className="p-4 text-center">Transcript</th>
