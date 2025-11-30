@@ -153,6 +153,14 @@ export default function AdminView({ onBack }: AdminViewProps) {
         }
     };
 
+    const handleDownloadAudio = (filename: string) => {
+        window.location.href = `/api/download-recording?filename=${encodeURIComponent(filename)}&type=audio`;
+    };
+
+    const handleDownloadTranscript = (filename: string) => {
+        window.location.href = `/api/download-recording?filename=${encodeURIComponent(filename)}&type=transcript`;
+    };
+
     return (
         <div className="min-h-screen bg-slate-900 text-white p-8">
             <div className="max-w-6xl mx-auto">
@@ -382,6 +390,24 @@ export default function AdminView({ onBack }: AdminViewProps) {
                                                             </>
                                                         ) : (
                                                             <>
+                                                                {rec.hasAudio && (
+                                                                    <button
+                                                                        onClick={() => handleDownloadAudio(rec.filename)}
+                                                                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded text-xs transition-colors"
+                                                                        title="Download Audio"
+                                                                    >
+                                                                        🎵
+                                                                    </button>
+                                                                )}
+                                                                {rec.hasTranscript && (
+                                                                    <button
+                                                                        onClick={() => handleDownloadTranscript(rec.filename)}
+                                                                        className="px-2 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-xs transition-colors"
+                                                                        title="Download Transcript"
+                                                                    >
+                                                                        📝
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     onClick={() => handleEdit(rec)}
                                                                     className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-colors"
