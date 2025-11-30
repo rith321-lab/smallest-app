@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import Waveform from './Waveform';
 
 interface AnnotationViewProps {
     recordings: Blob[];
@@ -30,8 +31,14 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
     const [autoTranscribing, setAutoTranscribing] = useState(false);
     const [autoTranscribeError, setAutoTranscribeError] = useState<string | null>(null);
     const [autoTranscribeProgress, setAutoTranscribeProgress] = useState<string | null>(null);
+    const [audioTimes, setAudioTimes] = useState<{ currentTime: number; duration: number }[]>([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
+
+    // Initialize audio times array when recordings change
+    useEffect(() => {
+        setAudioTimes(recordings.map(() => ({ currentTime: 0, duration: 0 })));
+    }, [recordings.length]);
 
     // Create stable object URLs for recordings to avoid recreating them on every render
     const audioUrls = useMemo(() => {
@@ -321,10 +328,53 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                                         {currentPlayingIndex === index ? '⏸ Pause' : '▶ Play'}
                                     </button>
                                 </div>
+                                {/* Waveform visualization */}
+                                {blob.size > 0 && (
+                                    <div className="mt-2">
+                                        <Waveform
+                                            audioUrl={audioUrls[index]}
+                                            isPlaying={currentPlayingIndex === index}
+                                            currentTime={audioTimes[index]?.currentTime || 0}
+                                            duration={audioTimes[index]?.duration || 0}
+                                            onSeek={(time) => {
+                                                const audio = audioRefs.current[index];
+                                                if (audio) {
+                                                    audio.currentTime = time;
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                )}
                                 <audio
                                     ref={(el) => { audioRefs.current[index] = el; }}
                                     src={audioUrls[index]}
                                     onEnded={() => setCurrentPlayingIndex(null)}
+                                    onTimeUpdate={(e) => {
+                                        const audio = e.currentTarget;
+                                        setAudioTimes(prev => {
+                                            const newTimes = [...prev];
+                                            if (newTimes[index]) {
+                                                newTimes[index] = {
+                                                    currentTime: audio.currentTime,
+                                                    duration: audio.duration || 0
+                                                };
+                                            }
+                                            return newTimes;
+                                        });
+                                    }}
+                                    onLoadedMetadata={(e) => {
+                                        const audio = e.currentTarget;
+                                        setAudioTimes(prev => {
+                                            const newTimes = [...prev];
+                                            if (newTimes[index]) {
+                                                newTimes[index] = {
+                                                    ...newTimes[index],
+                                                    duration: audio.duration || 0
+                                                };
+                                            }
+                                            return newTimes;
+                                        });
+                                    }}
                                     className="hidden"
                                 />
                             </div>
