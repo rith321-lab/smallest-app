@@ -44,9 +44,10 @@ interface ConversationRoomProps {
     userData: { name: string; nationality: string; age?: number; gender?: string; dialect?: string; recordingDevice?: string };
     partnerData: { name: string; nationality: string };
     onEnd: (recordings: Blob[], metadata: any) => void;
+    onAdmin: () => void;
 }
 
-export default function ConversationRoom({ socket, roomId, userData, partnerData, onEnd }: ConversationRoomProps) {
+export default function ConversationRoom({ socket, roomId, userData, partnerData, onEnd, onAdmin }: ConversationRoomProps) {
     const [status, setStatus] = useState<'connecting' | 'waiting' | 'my_turn' | 'their_turn'>('connecting');
     const [connectionStatus, setConnectionStatus] = useState<string>('initializing'); // new, checking, connected, etc.
     const [timeLeft, setTimeLeft] = useState(30);
@@ -612,6 +613,14 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
                             <h3 className="font-bold">{userData.name}</h3>
                             <p className="text-sm text-slate-400">{userData.nationality}</p>
                         </div>
+                        <button
+                            onClick={onAdmin}
+                            className="ml-2 text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-slate-300 transition-colors flex items-center gap-2"
+                            title="Recordings Dashboard"
+                        >
+                            <span>📊</span>
+                            <span className="font-medium">Recordings Dashboard</span>
+                        </button>
                     </div>
 
                     <div className="flex flex-col items-center">

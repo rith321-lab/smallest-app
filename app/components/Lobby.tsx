@@ -36,10 +36,10 @@ export default function Lobby({ userData, onFindMatch, onCreatePrivate, onJoinPr
                         <button
                             onClick={onAdmin}
                             className="ml-2 text-xs px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 transition-colors flex items-center gap-2"
-                            title="View Dataset Tracker"
+                            title="Recordings Dashboard"
                         >
                             <span>📊</span>
-                            <span className="font-medium">Data Set Visualization</span>
+                            <span className="font-medium">Recordings Dashboard</span>
                         </button>
                     </div>
                 </div>
