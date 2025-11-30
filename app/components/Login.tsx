@@ -9,6 +9,40 @@ const NATIONALITIES = [
     'Peru', 'Spain', 'Uruguay', 'Venezuela', 'Other'
 ];
 
+const DIALECTS: Record<string, string[]> = {
+    'Argentina': ['Rioplatense', 'Cordobés', 'Cuyo', 'Patagonian'],
+    'Bolivia': ['Andean', 'Camba', 'Chapaco'],
+    'Chile': ['Chilean Spanish', 'Chilote'],
+    'Colombia': ['Bogotano', 'Costeño', 'Paisa', 'Caleño', 'Santandereano'],
+    'Costa Rica': ['Costa Rican Spanish'],
+    'Cuba': ['Cuban Spanish'],
+    'Dominican Republic': ['Dominican Spanish'],
+    'Ecuador': ['Coastal Ecuadorian', 'Andean Ecuadorian', 'Amazonian'],
+    'El Salvador': ['Salvadoran Spanish'],
+    'Equatorial Guinea': ['Equatoguinean Spanish'],
+    'Guatemala': ['Guatemalan Spanish'],
+    'Honduras': ['Honduran Spanish'],
+    'Mexico': ['Northern Mexican', 'Central Mexican', 'Southern Mexican', 'Yucatecan'],
+    'Nicaragua': ['Nicaraguan Spanish'],
+    'Panama': ['Panamanian Spanish'],
+    'Paraguay': ['Paraguayan Spanish'],
+    'Peru': ['Coastal Peruvian', 'Andean Peruvian', 'Amazonian Peruvian'],
+    'Spain': ['Castilian', 'Andalusian', 'Canarian', 'Catalan Spanish'],
+    'Uruguay': ['Uruguayan Spanish'],
+    'Venezuela': ['Central Venezuelan', 'Maracucho', 'Andean Venezuelan', 'Llanero'],
+    'Other': ['Other']
+};
+
+const RECORDING_DEVICES = [
+    'iPhone',
+    'Android Phone',
+    'MacBook',
+    'Windows Laptop',
+    'iPad/Tablet',
+    'Desktop Computer',
+    'Other'
+];
+
 const INTERESTS = [
     'Travel', 'Politics', 'Media', 'Sports', 'Technology', 'Art', 'Music', 'Food', 'History', 'Science',
     'Shopping', 'Self Care', 'Gym', 'Dating', 'Gaming', 'Movies', 'Fashion', 'Nature'
@@ -17,16 +51,23 @@ const INTERESTS = [
 const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 
 interface LoginProps {
-    onJoin: (data: { name: string; nationality: string; interests: string[]; age: number; gender: string }) => void;
+    onJoin: (data: { name: string; nationality: string; interests: string[]; age: number; gender: string; dialect: string; recordingDevice: string }) => void;
     onAdmin: () => void;
 }
 
 export default function Login({ onJoin, onAdmin }: LoginProps) {
     const [name, setName] = useState('');
     const [nationality, setNationality] = useState(NATIONALITIES[0]);
+    const [dialect, setDialect] = useState(DIALECTS[NATIONALITIES[0]][0]);
+    const [recordingDevice, setRecordingDevice] = useState(RECORDING_DEVICES[0]);
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
     const [age, setAge] = useState(25);
     const [gender, setGender] = useState(GENDERS[0]);
+
+    const handleNationalityChange = (newNationality: string) => {
+        setNationality(newNationality);
+        setDialect(DIALECTS[newNationality]?.[0] || 'Other');
+    };
 
     const toggleInterest = (interest: string) => {
         setSelectedInterests(prev =>
@@ -39,7 +80,7 @@ export default function Login({ onJoin, onAdmin }: LoginProps) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (name.trim() && age >= 18 && age <= 100) {
-            onJoin({ name, nationality, interests: selectedInterests, age, gender });
+            onJoin({ name, nationality, interests: selectedInterests, age, gender, dialect, recordingDevice });
         }
     };
 
@@ -69,11 +110,25 @@ export default function Login({ onJoin, onAdmin }: LoginProps) {
                         <select
                             id="nationality"
                             value={nationality}
-                            onChange={(e) => setNationality(e.target.value)}
+                            onChange={(e) => handleNationalityChange(e.target.value)}
                             className="w-full px-4 py-2 bg-slate-800/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none"
                         >
                             {NATIONALITIES.map(nat => (
                                 <option key={nat} value={nat} className="bg-slate-800">{nat}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label htmlFor="dialect" className="block text-sm font-medium text-slate-300 mb-1">Dialect/Region</label>
+                        <select
+                            id="dialect"
+                            value={dialect}
+                            onChange={(e) => setDialect(e.target.value)}
+                            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none"
+                        >
+                            {(DIALECTS[nationality] || ['Other']).map(d => (
+                                <option key={d} value={d} className="bg-slate-800">{d}</option>
                             ))}
                         </select>
                     </div>
@@ -102,6 +157,20 @@ export default function Login({ onJoin, onAdmin }: LoginProps) {
                         >
                             {GENDERS.map(g => (
                                 <option key={g} value={g} className="bg-slate-800">{g}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label htmlFor="recordingDevice" className="block text-sm font-medium text-slate-300 mb-1">Recording Device</label>
+                        <select
+                            id="recordingDevice"
+                            value={recordingDevice}
+                            onChange={(e) => setRecordingDevice(e.target.value)}
+                            className="w-full px-4 py-2 bg-slate-800/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none"
+                        >
+                            {RECORDING_DEVICES.map(device => (
+                                <option key={device} value={device} className="bg-slate-800">{device}</option>
                             ))}
                         </select>
                     </div>

@@ -13,7 +13,7 @@ import AdminView from './components/AdminView';
 
 export default function Home() {
   const [view, setView] = useState<'login' | 'lobby' | 'conversation' | 'annotation' | 'admin'>('login');
-  const [userData, setUserData] = useState<{ name: string; nationality: string; interests: string[]; age: number; gender: string } | null>(null);
+  const [userData, setUserData] = useState<{ name: string; nationality: string; interests: string[]; age: number; gender: string; dialect: string; recordingDevice: string } | null>(null);
   const [partnerData, setPartnerData] = useState<{ name: string; nationality: string } | null>(null);
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
   const [roomId, setRoomId] = useState<string>('');
@@ -59,7 +59,7 @@ export default function Home() {
     };
   }, []);
 
-  const handleJoin = (data: { name: string; nationality: string; interests: string[]; age: number; gender: string }) => {
+  const handleJoin = (data: { name: string; nationality: string; interests: string[]; age: number; gender: string; dialect: string; recordingDevice: string }) => {
     setUserData(data);
     setView('lobby');
     socketRef.current?.emit('login', data);

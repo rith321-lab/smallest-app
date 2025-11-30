@@ -63,14 +63,24 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
         return `Turn ${index + 1} - Speaker ${speaker} (${speakerName}) [${timeRange}]`;
     };
 
-    // Build formatted transcript with labels and timing
+    // Build formatted transcript with labels, timing, and SSML tags
     const buildFormattedTranscript = (texts: string[]) => {
         const lines: string[] = [];
+        lines.push('<speak>');
         for (let i = 0; i < texts.length; i++) {
             const label = getSpeakerLabel(i);
             const text = texts[i] || '[No audio captured]';
-            lines.push(`[${label}]\n${text}\n`);
+            // Convert annotation tags to SSML format
+            const ssmlText = text
+                .replace(/\[Laugh\]/gi, '<laugh/>')
+                .replace(/\[Cough\]/gi, '<cough/>')
+                .replace(/\[Sigh\]/gi, '<sigh/>')
+                .replace(/\[Noise\]/gi, '<noise/>');
+            lines.push(`<!-- ${label} -->`);
+            lines.push(`<p>${ssmlText}</p>`);
+            lines.push('');
         }
+        lines.push('</speak>');
         return lines.join('\n');
     };
 
@@ -233,6 +243,13 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
             formData.append('userIsSpeakerA', String(metadata?.userIsSpeakerA || false));
             formData.append('turnCount', String(recordings.length));
             formData.append('transcript', transcript);
+            
+            // Add new metadata fields for TTS requirements
+            formData.append('userAge', String(metadata?.userAge || ''));
+            formData.append('userGender', metadata?.userGender || '');
+            formData.append('userDialect', metadata?.userDialect || '');
+            formData.append('userRecordingDevice', metadata?.userRecordingDevice || '');
+            formData.append('userNationality', metadata?.userNationality || '');
 
             const response = await fetch('/api/save-conversation', {
                 method: 'POST',
