@@ -3,6 +3,15 @@ import OpenAI from 'openai';
 
 export async function POST(request: NextRequest) {
     try {
+        // Check for API key before proceeding
+        if (!process.env.OPENAI_API_KEY) {
+            console.error('Missing OPENAI_API_KEY environment variable');
+            return NextResponse.json(
+                { error: 'Auto-transcription not configured. Please set OPENAI_API_KEY in your environment.' },
+                { status: 500 }
+            );
+        }
+
         // Initialize OpenAI client only when the endpoint is called, not during build
         const openai = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY,
