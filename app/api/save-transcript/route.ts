@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { STORAGE_CONFIG } from '@/app/lib/storage-config';
 
-// Ensure data directory exists
-const DATA_DIR = path.join(process.cwd(), 'data', 'recordings', 'spa');
-const TRANSCRIPT_DIR = path.join(DATA_DIR, 'transcripts');
+const { TRANSCRIPT_DIR } = STORAGE_CONFIG;
 
 async function ensureDirectories() {
     await fs.mkdir(TRANSCRIPT_DIR, { recursive: true });

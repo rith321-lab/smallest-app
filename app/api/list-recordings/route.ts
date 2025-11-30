@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { STORAGE_CONFIG } from '@/app/lib/storage-config';
 
-const DATA_DIR = path.join(process.cwd(), 'data', 'recordings', 'spa');
-const AUDIO_DIR = path.join(DATA_DIR, 'audio');
-const TRANSCRIPT_DIR = path.join(DATA_DIR, 'transcripts');
+const { AUDIO_DIR, TRANSCRIPT_DIR } = STORAGE_CONFIG;
 
 export const dynamic = 'force-dynamic'; // Ensure not cached
 

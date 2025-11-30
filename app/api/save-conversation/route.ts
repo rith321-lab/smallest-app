@@ -3,13 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { STORAGE_CONFIG } from '@/app/lib/storage-config';
 
 const execAsync = promisify(exec);
 
-const DATA_DIR = path.join(process.cwd(), 'data', 'recordings', 'spa');
-const AUDIO_DIR = path.join(DATA_DIR, 'audio');
-const TRANSCRIPT_DIR = path.join(DATA_DIR, 'transcripts');
-const TEMP_DIR = path.join(process.cwd(), 'data', 'temp');
+const { DATA_DIR, AUDIO_DIR, TRANSCRIPT_DIR } = STORAGE_CONFIG;
+const TEMP_DIR = path.join(DATA_DIR, '..', '..', 'temp');
 
 // Generate unique conversation ID
 function generateConversationId(): string {
