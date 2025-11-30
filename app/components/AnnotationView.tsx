@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 
 interface AnnotationViewProps {
     recordings: Blob[];
@@ -12,8 +12,26 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
     const [transcript, setTranscript] = useState('');
     const [saving, setSaving] = useState(false);
     const [currentPlayingIndex, setCurrentPlayingIndex] = useState<number | null>(null);
+    const [playbackError, setPlaybackError] = useState<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
+
+    // Create stable object URLs for recordings to avoid recreating them on every render
+    const audioUrls = useMemo(() => {
+        console.log('Creating audio URLs for', recordings.length, 'recordings');
+        return recordings.map((blob, index) => {
+            const url = URL.createObjectURL(blob);
+            console.log(`Recording ${index}: size=${blob.size}, type=${blob.type}, url=${url}`);
+            return url;
+        });
+    }, [recordings]);
+
+    // Clean up object URLs when component unmounts or recordings change
+    useEffect(() => {
+        return () => {
+            audioUrls.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, [audioUrls]);
 
     // Get speaker labels from metadata
     const getSpeakerLabel = (index: number) => {
@@ -47,6 +65,9 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
 
 
     const handlePlayTurn = (index: number) => {
+        // Clear any previous error
+        setPlaybackError(null);
+        
         // Stop all other audio
         audioRefs.current.forEach((audio, i) => {
             if (audio && i !== index) {
@@ -56,13 +77,34 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
         });
 
         const audio = audioRefs.current[index];
+        const blob = recordings[index];
+        
+        console.log('Play click', { index, audio, blobSize: blob?.size, blobType: blob?.type });
+        
         if (audio) {
             if (currentPlayingIndex === index) {
                 audio.pause();
                 setCurrentPlayingIndex(null);
             } else {
-                audio.play();
-                setCurrentPlayingIndex(index);
+                audio.play()
+                    .then(() => {
+                        console.log('Audio playback started for turn', index);
+                        setCurrentPlayingIndex(index);
+                    })
+                    .catch(err => {
+                        console.error('Error playing annotation audio:', err);
+                        const errorMsg = `Playback error for Turn ${index + 1}: ${err.message || 'Unknown error'}. Audio format: ${blob?.type || 'unknown'}`;
+                        setPlaybackError(errorMsg);
+                        
+                        // Check if the browser can play this format
+                        if (blob?.type && audio.canPlayType) {
+                            const canPlay = audio.canPlayType(blob.type);
+                            console.log(`Browser canPlayType('${blob.type}'): ${canPlay || 'empty string (cannot play)'}`);
+                            if (!canPlay) {
+                                setPlaybackError(`Your browser cannot play ${blob.type} audio format. Please try using Chrome or Firefox.`);
+                            }
+                        }
+                    });
             }
         }
     };
@@ -144,6 +186,13 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                     </p>
                 </div>
 
+                {/* Playback Error Display */}
+                {playbackError && (
+                    <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                        <strong>Audio Playback Error:</strong> {playbackError}
+                    </div>
+                )}
+
                 {/* Audio Recordings List */}
                 <div className="mb-8">
                     <h2 className="text-xl font-semibold mb-4">Recordings ({recordings.length} turns)</h2>
@@ -174,7 +223,7 @@ export default function AnnotationView({ recordings, metadata, onComplete }: Ann
                                 </div>
                                 <audio
                                     ref={(el) => { audioRefs.current[index] = el; }}
-                                    src={URL.createObjectURL(blob)}
+                                    src={audioUrls[index]}
                                     onEnded={() => setCurrentPlayingIndex(null)}
                                     className="hidden"
                                 />
