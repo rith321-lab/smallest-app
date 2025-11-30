@@ -3,6 +3,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 
+// Helper function to get a supported audio MIME type for MediaRecorder
+// Safari doesn't support WebM, so we need to fall back to mp4
+function getSupportedAudioMimeType(): string {
+    const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/mpeg',
+        'audio/ogg',
+    ];
+    
+    if (typeof window === 'undefined' || !window.MediaRecorder) {
+        return '';
+    }
+    
+    for (const mimeType of candidates) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+            console.log('Using audio MIME type:', mimeType);
+            return mimeType;
+        }
+    }
+    
+    console.warn('No supported audio MIME type found, using default');
+    return '';
+}
+
 interface TurnRecording {
     blob: Blob;
     speaker: 'me' | 'partner';
@@ -380,18 +406,17 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         }
 
         try {
-            let options: MediaRecorderOptions = {
-                audioBitsPerSecond: 128000
+            // Get a MIME type that works on this browser (Safari needs mp4, Chrome/Firefox use webm)
+            const mimeType = getSupportedAudioMimeType();
+            const options: MediaRecorderOptions = {
+                audioBitsPerSecond: 128000,
+                ...(mimeType && { mimeType })
             };
-            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                options = { ...options, mimeType: 'audio/webm;codecs=opus' };
-            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { ...options, mimeType: 'audio/webm' };
-            }
-            // Safari often supports empty options best, or audio/mp4, but let's stick to webm preference or default
 
             const turnAtStart = currentTurnRef.current;
             const recorder = new MediaRecorder(localStreamRef.current, options);
+            const actualMimeType = recorder.mimeType || mimeType || 'audio/webm';
+            console.log('Local recording started with MIME type:', actualMimeType);
 
             recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
@@ -400,7 +425,11 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             };
 
             recorder.onstop = () => {
-                const blob = new Blob(currentChunkRef.current, { type: 'audio/webm' });
+                // Use the actual MIME type from the recorder, not a hard-coded value
+                const blobType = currentChunkRef.current[0]?.type || actualMimeType;
+                const blob = new Blob(currentChunkRef.current, { type: blobType });
+                console.log('Local recording stopped, blob size:', blob.size, 'type:', blob.type);
+                
                 if (blob.size > 0) {
                     recordingsRef.current = [...recordingsRef.current, blob];
                     setRecordings(prev => [...prev, blob]);
@@ -451,17 +480,17 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
         }
 
         try {
-            let options: MediaRecorderOptions = {
-                audioBitsPerSecond: 128000
+            // Get a MIME type that works on this browser (Safari needs mp4, Chrome/Firefox use webm)
+            const mimeType = getSupportedAudioMimeType();
+            const options: MediaRecorderOptions = {
+                audioBitsPerSecond: 128000,
+                ...(mimeType && { mimeType })
             };
-            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                options = { ...options, mimeType: 'audio/webm;codecs=opus' };
-            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { ...options, mimeType: 'audio/webm' };
-            }
 
             const turnAtStart = currentTurnRef.current;
             const recorder = new MediaRecorder(remoteStreamRef.current, options);
+            const actualMimeType = recorder.mimeType || mimeType || 'audio/webm';
+            console.log('Remote recording started with MIME type:', actualMimeType);
 
             recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
@@ -470,7 +499,11 @@ export default function ConversationRoom({ socket, roomId, userData, partnerData
             };
 
             recorder.onstop = () => {
-                const blob = new Blob(remoteChunkRef.current, { type: 'audio/webm' });
+                // Use the actual MIME type from the recorder, not a hard-coded value
+                const blobType = remoteChunkRef.current[0]?.type || actualMimeType;
+                const blob = new Blob(remoteChunkRef.current, { type: blobType });
+                console.log('Remote recording stopped, blob size:', blob.size, 'type:', blob.type);
+                
                 if (blob.size > 0) {
                     // Add to recordings for saving (same as local recordings)
                     recordingsRef.current = [...recordingsRef.current, blob];
